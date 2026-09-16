@@ -1,0 +1,9 @@
+Package: android-analysis-toolchain
+Version: 2.1.0
+Section: devel
+Priority: optional
+Architecture: all
+Depends: bash, python3 (>= 3.10), python3-tk, android-tools-adb
+Maintainer: Android Analysis Maintainers
+Description: Authorized Android analysis toolchain GUI
+ Native Tkinter interface for authorized Android analysis, ADB and instrumentation workflows.

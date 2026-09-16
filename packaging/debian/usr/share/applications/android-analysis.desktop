@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Android Analysis
+GenericName=Android Analysis Toolchain
+Comment=Panel autorizado de análisis Android, ADB e instrumentación
+Exec=android-analysis
+TryExec=android-analysis
+Icon=android-analysis
+Terminal=false
+Categories=Development;Security;System;
+Keywords=Android;ADB;APK;Frida;MobSF;Reversing;
+StartupNotify=true
+StartupWMClass=android-analysis

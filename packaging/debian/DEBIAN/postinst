@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+chmod 755 /usr/share/android-analysis/src/no4nn.sh
+chmod 755 /usr/share/android-analysis/install.sh
+chmod 755 /usr/share/android-analysis/src/no4nn_gui.py
+chmod 755 /usr/bin/android-analysis
+
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
+
+exit 0

@@ -6,9 +6,11 @@ cd "$ROOT"
 
 bash -n src/no4nn.sh
 bash -n src/android_toolchain/core.sh
+python3 -m py_compile src/no4nn_gui.py
 bash src/no4nn.sh --help | grep -q -- '--dry-run'
 bash src/no4nn.sh --help | grep -q -- '--static-only'
 bash src/no4nn.sh --help | grep -q -- '--plan-json'
+bash src/no4nn.sh --help | grep -q -- '--gui'
 
 for style in 0 1 2; do
     output="$(bash src/no4nn.sh --dry-run --static-only --tools-dir "/tmp/tool09-$style" --banner-style "$style")"

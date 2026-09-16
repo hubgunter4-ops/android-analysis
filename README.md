@@ -20,7 +20,7 @@ El flujo recomendado es ejecutar `--guided` o `--interactive`, elegir `--static-
 
 ## Pasos de instalación
 
-Requisitos: Ubuntu, Bash, `sudo` para APT, Python 3, Java y conectividad HTTPS. Las fases dinámicas requieren ADB, emulador/dispositivo de laboratorio, Frida/objection y permisos de depuración; la fase de tráfico requiere Wireshark/tcpdump/mitmproxy. El bootstrap instala las herramientas Python para el usuario actual y no crea ni activa `.venv`:
+Requisitos: Ubuntu, Bash, `sudo` para APT, Python 3, `python3-tk`, Java y conectividad HTTPS. Las fases dinámicas requieren ADB, emulador/dispositivo de laboratorio, Frida/objection y permisos de depuración; la fase de tráfico requiere Wireshark/tcpdump/mitmproxy. El bootstrap instala las herramientas Python para el usuario actual y no crea ni activa `.venv`:
 ```bash
 ./install.sh --help
 ./install.sh --guided
@@ -28,9 +28,60 @@ Requisitos: Ubuntu, Bash, `sudo` para APT, Python 3, Java y conectividad HTTPS. 
 # después de revisar el plan
 sudo -E ./install.sh --static-only
 ```
+También existe una interfaz gráfica nativa para estaciones con escritorio y Tk disponible:
+```bash
+./install.sh --gui
+```
+La GUI empieza en modo **dry-run**, permite seleccionar el alcance, el directorio de herramientas,
+el estilo del banner y si se omite APT, muestra la salida en vivo y solicita confirmación antes de
+una instalación real. El modo CLI permanece disponible para servidores y automatización.
 `--tools-dir` cambia la raíz de instalación y `JADX_SHA256` fija el checksum esperado. APT, JADX, MobSF, Frida y ADB se preparan solo según la política de la estación. Si una herramienta Python queda en `$HOME/.local/bin`, añade esa ruta al `PATH`.
 
 Punto de entrada principal: `./src/no4nn.sh`. Revisa siempre `--help` y la autorización vigente antes de elegir una operación activa.
+
+## Integración con Ubuntu
+
+El repositorio incluye un icono SVG, un archivo `.desktop` y un script reproducible para construir un paquete Debian:
+
+```bash
+./packaging/build-deb.sh
+sudo apt install ./android-analysis-toolchain_2.1.0_all.deb
+```
+
+Consulta [docs/desktop-integration.md](docs/desktop-integration.md) para la estructura, los campos del lanzador y la actualización manual del menú.
+
+## 🐉 Instalación en Kali Linux
+
+Kali Linux usa el mismo formato Debian, por lo que el paquete se puede construir e instalar con el flujo anterior. El paquete incluye una variante de icono en azul inspirada en la identidad visual de Kali, sin incorporar logotipos oficiales de terceros.
+
+```bash
+sudo apt update
+sudo apt install -y python3-tk android-tools-adb dpkg-dev
+./packaging/build-deb.sh
+sudo apt install ./android-analysis-toolchain_2.1.0_all.deb
+```
+
+El icono fuente está disponible en [`assets/android-analysis-kali.svg`](assets/android-analysis-kali.svg) y se instala en el paquete como `android-analysis.svg`. Después de instalar, busca **Android Analysis** en el menú de Kali o ejecuta `android-analysis` desde una terminal.
+
+```mermaid
+flowchart LR
+    accTitle: Kali Desktop Packaging Flow
+    accDescr: Flujo para construir el paquete Debian, instalar sus dependencias y registrar Android Analysis con su icono azul en el menú de Kali Linux
+
+    source([🏁 Código fuente]) --> build[📦 build-deb.sh]
+    build --> package[📦 Paquete Debian]
+    package --> deps[🔧 python3-tk + ADB]
+    deps --> install[🚀 Instalación con apt]
+    install --> menu[🎨 Menú de Kali + icono]
+
+    classDef start fill:#ede9fe,stroke:#7c3aed,stroke-width:2px,color:#3b0764
+    classDef process fill:#dbeafe,stroke:#2563eb,stroke-width:2px,color:#1e3a5f
+    classDef success fill:#dcfce7,stroke:#16a34a,stroke-width:2px,color:#14532d
+
+    class source start
+    class build,package,deps process
+    class install,menu success
+```
 
 ## Guía de ejecución
 
