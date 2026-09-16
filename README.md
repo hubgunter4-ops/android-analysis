@@ -12,7 +12,7 @@ El código se distribuye bajo **MIT License**. Consulta el archivo `LICENSE` par
 
 ## Estructura
 
-`src/android_toolchain/core.sh` conserva las seis fases y plan JSON; `src/no4nn.sh` resuelve el entrypoint; `archive/original/` mantiene el fuente heredado; `tests/` verifica shell y dry-run. La imagen `assets/operation-flow.png` resume la transición operacional; el banner interno se mantiene en el entrypoint o núcleo de la herramienta.
+`src/android_toolchain/core.sh` conserva las seis fases y plan JSON; `src/no4nn.sh` resuelve el entrypoint; `tests/` conserva regresiones shell, dry-run y sintaxis de la GUI. El diagrama `assets/operation-flow.png` resume la transición operacional; el banner interno se mantiene en el entrypoint o núcleo de la herramienta.
 
 ## Flujo recomendado
 
@@ -39,9 +39,20 @@ una instalación real. El modo CLI permanece disponible para servidores y automa
 
 Punto de entrada principal: `./src/no4nn.sh`. Revisa siempre `--help` y la autorización vigente antes de elegir una operación activa.
 
+### Versión CLI
+
+La interfaz de línea de comandos actual es **v2.1.0**. Se consulta con:
+
+```bash
+./install.sh --help
+./src/no4nn.sh --help
+```
+
+El CLI soporta `--dry-run`, `--plan-json`, `--static-only`, `--dynamic-only`, `--skip-apt`, `--interactive`, `--guided` y `--gui`. La versión también aparece en el banner como `Version 2.1.0`.
+
 ## Integración con Ubuntu
 
-El repositorio incluye un icono SVG, un archivo `.desktop` y un script reproducible para construir un paquete Debian:
+El repositorio incluye un icono SVG, un archivo `.desktop` y un paquete Debian versionado. Puedes consultar directamente el [paquete `.deb` v2.1.0](android-analysis-toolchain_2.1.0_all.deb), el [lanzador `.desktop`](packaging/debian/usr/share/applications/android-analysis.desktop), el [icono SVG](packaging/debian/usr/share/icons/hicolor/scalable/apps/android-analysis.svg) y el [script de construcción](packaging/build-deb.sh).
 
 ```bash
 ./packaging/build-deb.sh
