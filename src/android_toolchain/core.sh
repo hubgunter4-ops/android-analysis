@@ -8,6 +8,11 @@ IFS=$'\n\t'
 
 VERSION="2.1.0"
 TOOLS_DIR="${TOOLS_DIR:-$HOME/security-tools}"
+JADX_VERSION="1.5.6"
+JADX_URL="https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip"
+JADX_SHA256_EXPECTED="545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974"
+DEX2JAR_COMMIT="b5bda4fb4935ae8b3869b422454ae3b3896c7bc1"
+MOBSF_COMMIT="7a4785fb3b55949231dd2b5d7df82ccba02a114f"
 DRY_RUN=0
 INTERACTIVE=0
 GUIDED=0
@@ -67,7 +72,7 @@ Uso: no4nn.sh [opciones]
   -h, --help             Muestra esta ayuda.
 
 Variables:
-  JADX_SHA256             SHA-256 esperado del ZIP de JADX; si se define, se verifica.
+  JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
   TOOLS_DIR               Igual que --tools-dir.
 
 Ejemplos:
@@ -109,7 +114,12 @@ sudo_run() {
 validate_path() {
     local path="$1"
     [[ "$path" =~ ^[A-Za-z0-9_./:@+,-]+$ ]] || fail "ruta no válida; usa solo caracteres de ruta seguros"
-    [[ "$path" != /*/../* && "$path" != ../* && "$path" != */.. ]] || fail "ruta con traversal no permitida"
+    local part
+    IFS='/' read -r -a path_parts <<< "$path"
+    for part in "${path_parts[@]}"; do
+        [[ "$part" != .. ]] || fail "ruta con traversal no permitida"
+    done
+    [[ "$path" != / ]] || fail "no se permite usar la raíz como directorio de herramientas"
 }
 
 validate_style() { [[ "$BANNER_STYLE" =~ ^[0-2]$ ]] || fail "banner debe ser 0, 1 o 2"; }
@@ -144,7 +154,7 @@ flow_transition() {
 }
 
 validate_checksum() {
-    [[ -z "${JADX_SHA256:-}" || "$JADX_SHA256" =~ ^[A-Fa-f0-9]{64}$ ]] || fail "JADX_SHA256 debe ser SHA-256 hexadecimal de 64 caracteres"
+    [[ -z "${JADX_SHA256:-}" || "$JADX_SHA256" == "$JADX_SHA256_EXPECTED" ]] || fail "JADX_SHA256 no coincide con el checksum fijado de JADX ${JADX_VERSION}"
 }
 
 plan_json() {
@@ -194,48 +204,53 @@ install_apk_tools() {
     log "[3/6] Descompilación / desempaquetado de APK"
     if (( ! SKIP_APT )); then sudo_run apt-get install -y apktool; fi
     local jadx_dir="$TOOLS_DIR/jadx"
+    local jadx_marker="$jadx_dir/.jadx.sha256"
     if [[ -d "$jadx_dir/bin" ]]; then
+        [[ -f "$jadx_marker" && "$(<"$jadx_marker")" == "$JADX_SHA256_EXPECTED" ]] || fail "JADX existente sin marcador de integridad válido; reinstala: $jadx_dir"
         log "jadx ya existe: $jadx_dir"
     elif (( DRY_RUN )); then
-        log "Descarga planificada: release latest de jadx por HTTPS"
+        log "Descarga planificada: JADX ${JADX_VERSION} por HTTPS con SHA-256 fijado"
     else
         local url archive
-        url="$(curl -fsSL --proto '=https' --tlsv1.2 https://api.github.com/repos/skylot/jadx/releases/latest | sed -n 's/.*"browser_download_url": "\([^"]*\-all\.zip\)".*/\1/p' | head -n 1)"
-        [[ "$url" == https://github.com/* ]] || fail "no se obtuvo una URL HTTPS esperada para jadx"
+        url="$JADX_URL"
         archive="$(mktemp --tmpdir jadx.XXXXXX.zip)"
         trap 'rm -f "${archive:-}"' RETURN
         curl -fL --proto '=https' --tlsv1.2 -o "$archive" "$url"
-        if [[ -n "${JADX_SHA256:-}" ]]; then
-            echo "${JADX_SHA256}  ${archive}" | sha256sum -c -
-        else
-            log "JADX_SHA256 no definido; se conserva TLS/origen GitHub sin checksum criptográfico"
-        fi
+        echo "${JADX_SHA256_EXPECTED}  ${archive}" | sha256sum -c -
         mkdir -p "$jadx_dir"
         unzip -q "$archive" -d "$jadx_dir"
         find "$jadx_dir/bin" -type f -exec chmod +x {} +
+        printf '%s\n' "$JADX_SHA256_EXPECTED" > "$jadx_marker"
+        chmod 0644 "$jadx_marker"
         rm -f "$archive"
         log "jadx instalado en $jadx_dir"
     fi
-    clone_once "https://github.com/pxb1988/dex2jar.git" "$TOOLS_DIR/dex2jar"
+    clone_fixed "https://github.com/pxb1988/dex2jar.git" "$TOOLS_DIR/dex2jar" "$DEX2JAR_COMMIT"
 }
 
-clone_once() {
-    local url="$1" dest="$2"
+clone_fixed() {
+    local url="$1" dest="$2" revision="$3"
     validate_path "$dest"
     if [[ -d "$dest/.git" ]]; then
-        log "Repositorio existente: $dest"
+        local current
+        current="$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)"
+        [[ "$current" == "$revision" ]] || fail "repositorio existente con revisión inesperada: $dest"
+        log "Repositorio existente en revisión fijada: $dest"
     elif [[ -e "$dest" && -n "$(find "$dest" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]]; then
         fail "destino no vacío y no es un clone controlado: $dest"
     else
-        run git -c protocol.version=2 clone --depth 1 -- "$url" "$dest"
+        run git -c protocol.version=2 init --quiet "$dest"
+        run git -C "$dest" remote add origin "$url"
+        run git -C "$dest" fetch --quiet --depth 1 origin "$revision"
+        run git -C "$dest" checkout --quiet --detach FETCH_HEAD
     fi
 }
 
 python_tools() {
     if (( DRY_RUN )); then
-        run python3 -m pip install --user --upgrade androguard quark-engine apkid frida-tools objection mitmproxy
+        run python3 -m pip install --user --require-hashes --requirement "$ROOT_DIR/requirements.lock"
     else
-        python3 -m pip install --user --upgrade androguard quark-engine apkid frida-tools objection mitmproxy
+        python3 -m pip install --user --require-hashes --requirement "$ROOT_DIR/requirements.lock"
     fi
     log "Herramientas Python instaladas para el usuario actual; usa $HOME/.local/bin en PATH"
 }
@@ -243,7 +258,7 @@ python_tools() {
 install_static() {
     log "[4/6] Detección de comportamiento malicioso (análisis estático)"
     python_tools
-    clone_once "https://github.com/MobSF/Mobile-Security-Framework-MobSF.git" "$TOOLS_DIR/MobSF"
+    clone_fixed "https://github.com/MobSF/Mobile-Security-Framework-MobSF.git" "$TOOLS_DIR/MobSF" "$MOBSF_COMMIT"
     log "MobSF queda preparado; ejecuta setup/run manualmente en el laboratorio"
 }
 
@@ -298,6 +313,7 @@ android_toolchain_main() {
     validate_checksum
     validate_path "$TOOLS_DIR"
     if [[ "$TOOLS_DIR" != /* ]]; then TOOLS_DIR="$PWD/$TOOLS_DIR"; fi
+    TOOLS_DIR="$(realpath -m -- "$TOOLS_DIR")"
     if (( GUIDED )); then
         banner
         guided_flow

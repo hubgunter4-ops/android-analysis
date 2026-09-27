@@ -30,7 +30,7 @@ READ_ONLY = {
     "list permissions", "list instrumentation", "list features", "list libraries",
     "list users", "list shared-users", "list bridges", "list staged-sessions",
     "list dnssd", "is-package-device-admin", "list-unknown-sources", "list-owners",
-    "list-policy-exempt-apps", "screencap", "logcat", "sqlite3", "bugreport",
+    "list-policy-exempt-apps",
 }
 
 

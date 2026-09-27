@@ -21,6 +21,12 @@ done
 static_output="$(bash src/no4nn.sh --dry-run --static-only --tools-dir /tmp/tool09-static)"
 grep -q 'jadx' <<<"$static_output"
 grep -q 'MobSF' <<<"$static_output"
+grep -q -- '--requirement' <<<"$static_output"
+grep -q 'requirements.lock' <<<"$static_output"
+grep -q -- '--require-hashes' <<<"$static_output"
+grep -q 'b5bda4fb4935ae8b3869b422454ae3b3896c7bc1' src/android_toolchain/core.sh
+grep -q '7a4785fb3b55949231dd2b5d7df82ccba02a114f' src/android_toolchain/core.sh
+! grep -q 'releases/latest' src/android_toolchain/core.sh
 
 dynamic_output="$(bash src/no4nn.sh --dry-run --dynamic-only --tools-dir /tmp/tool09-dynamic)"
 grep -q 'ADB' <<<"$dynamic_output"
@@ -38,6 +44,11 @@ fi
 
 if bash src/no4nn.sh --dry-run --tools-dir ../escape >/dev/null 2>&1; then
     echo 'ruta con traversal no fue rechazada' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --dry-run --tools-dir foo/../../outside >/dev/null 2>&1; then
+    echo 'traversal intermedio no fue rechazado' >&2
     exit 1
 fi
 
@@ -62,5 +73,20 @@ if JADX_SHA256=not-a-checksum bash src/no4nn.sh --dry-run --static-only >/dev/nu
     echo 'checksum inválido no fue rechazado' >&2
     exit 1
 fi
+
+if JADX_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    bash src/no4nn.sh --dry-run --static-only >/dev/null 2>&1; then
+    echo 'checksum no fijado no fue rechazado' >&2
+    exit 1
+fi
+
+if grep -Eq '"(screencap|logcat|sqlite3|bugreport)"' src/no4nn_gui.py; then
+    echo 'acción ADB sensible sigue exenta de confirmación' >&2
+    exit 1
+fi
+
+test -s requirements.lock
+grep -q '^setuptools==' requirements.lock
+grep -q -- '--hash=sha256:' requirements.lock
 
 printf '%s\n' 'test_installer.sh: OK'

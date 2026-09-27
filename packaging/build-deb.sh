@@ -10,8 +10,9 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 
 cp -a "$TEMPLATE_DIR/." "$STAGE_DIR/"
 mkdir -p "$STAGE_DIR/usr/share/android-analysis"
-cp -r "$ROOT_DIR/src" "$ROOT_DIR/docs" "$ROOT_DIR/install.sh" "$STAGE_DIR/usr/share/android-analysis/"
+cp -r "$ROOT_DIR/src" "$ROOT_DIR/docs" "$ROOT_DIR/install.sh" "$ROOT_DIR/requirements.txt" "$ROOT_DIR/requirements.in" "$ROOT_DIR/requirements.lock" "$STAGE_DIR/usr/share/android-analysis/"
 find "$STAGE_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
+find "$STAGE_DIR/usr/share/android-analysis" -type f -exec chmod 0644 {} +
 chmod 755 \
     "$STAGE_DIR/usr/bin/android-analysis" \
     "$STAGE_DIR/DEBIAN/postinst" \

@@ -20,7 +20,7 @@ El flujo recomendado es ejecutar `--guided` o `--interactive`, elegir `--static-
 
 ## Pasos de instalación
 
-Requisitos: Ubuntu, Bash, `sudo` para APT, Python 3, `python3-tk`, Java y conectividad HTTPS. Las fases dinámicas requieren ADB, emulador/dispositivo de laboratorio, Frida/objection y permisos de depuración; la fase de tráfico requiere Wireshark/tcpdump/mitmproxy. El bootstrap instala las herramientas Python para el usuario actual y no crea ni activa `.venv`:
+Requisitos: Ubuntu, Bash, `sudo` para APT, Python 3, `python3-tk`, Java y conectividad HTTPS. Las fases dinámicas requieren ADB, emulador/dispositivo de laboratorio, Frida/objection y permisos de depuración; la fase de tráfico requiere Wireshark/tcpdump/mitmproxy. El bootstrap instala las herramientas Python para el usuario actual mediante `requirements.lock`, que fija dependencias transitivas y hashes con `--require-hashes`; no crea ni activa `.venv`:
 ```bash
 ./install.sh --help
 ./install.sh --guided
@@ -35,7 +35,7 @@ También existe una interfaz gráfica nativa para estaciones con escritorio y Tk
 La GUI empieza en modo **dry-run**, permite seleccionar el alcance, el directorio de herramientas,
 el estilo del banner y si se omite APT, muestra la salida en vivo y solicita confirmación antes de
 una instalación real. El modo CLI permanece disponible para servidores y automatización.
-`--tools-dir` cambia la raíz de instalación y `JADX_SHA256` fija el checksum esperado. APT, JADX, MobSF, Frida y ADB se preparan solo según la política de la estación. Si una herramienta Python queda en `$HOME/.local/bin`, añade esa ruta al `PATH`.
+`--tools-dir` cambia la raíz de instalación. JADX, dex2jar y MobSF están fijados a una versión o commit aprobado y JADX se verifica obligatoriamente con SHA-256. APT, JADX, MobSF, Frida y ADB se preparan solo según la política de la estación. Si una herramienta Python queda en `$HOME/.local/bin`, añade esa ruta al `PATH`.
 
 Punto de entrada principal: `./src/no4nn.sh`. Revisa siempre `--help` y la autorización vigente antes de elegir una operación activa.
 

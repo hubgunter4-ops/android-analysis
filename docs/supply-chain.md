@@ -1,10 +1,10 @@
 # Cadena de suministro
 
-El instalador descarga paquetes del sistema, un release de JADX por GitHub y clona dex2jar/MobSF. Los orígenes están codificados en el script y las descargas externas se realizan por HTTPS con `curl --fail`, `--proto '=https'` y TLS 1.2 o superior.
+El instalador descarga paquetes del sistema, JADX v1.5.6 por GitHub y clona dex2jar/MobSF en commits fijados. Los orígenes están codificados en el script y las descargas externas se realizan por HTTPS con `curl --fail`, `--proto '=https'` y TLS 1.2 o superior.
 
-JADX admite verificación SHA-256 mediante `JADX_SHA256`. Si el proyecto publica checksums para una versión concreta, obtén el valor por un canal independiente y expórtalo antes de instalar. Sin ese valor, la protección es de transporte y origen, no una atestación criptográfica completa.
+JADX se verifica obligatoriamente con SHA-256 antes de descomprimirlo. El valor fijado para v1.5.6 es `545ea2be9c242511bc145755cf4bda2485ade42966e096f8b4d3da2a230e8974`. `requirements.in` declara las dependencias directas y `requirements.lock` fija las versiones transitivas y hashes; el instalador usa `pip --require-hashes`.
 
-Los clones se realizan con profundidad 1 y no se ejecutan scripts de terceros automáticamente. Revisa cambios de release, fija una versión aprobada para entornos productivos y conserva un inventario de:
+Los clones se realizan con profundidad 1 en la revisión aprobada y no se ejecutan scripts de terceros automáticamente. El instalador rechaza una revisión distinta en un destino existente. Revisa cambios de release antes de actualizar y conserva un inventario de:
 
 | Campo | Registro |
 |---|---|

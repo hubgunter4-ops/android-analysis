@@ -1,0 +1,8 @@
+# Versions reviewed and pinned for the Android Analysis 2.1.0 toolchain.
+# Update deliberately, review transitive changes, and regenerate this file before release.
+androguard==4.1.4
+quark-engine==26.9.1
+apkid==3.1.0
+frida-tools==14.10.4
+objection==1.12.5
+mitmproxy==12.2.3
