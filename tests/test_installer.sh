@@ -6,7 +6,7 @@ cd "$ROOT"
 
 bash -n src/no4nn.sh
 bash -n src/android_toolchain/core.sh
-python3 -m py_compile src/no4nn_gui.py
+python3 -m py_compile src/no4nn_gui.py src/ui/*.py
 bash src/no4nn.sh --help | grep -q -- '--dry-run'
 bash src/no4nn.sh --help | grep -q -- '--static-only'
 bash src/no4nn.sh --help | grep -q -- '--plan-json'
