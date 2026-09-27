@@ -35,14 +35,18 @@ READ_ONLY = {
 
 
 class ToolchainGUI(tk.Tk):
-    BG = "#10131a"
-    PANEL = "#181d27"
-    PANEL_ALT = "#202735"
-    TEXT = "#edf2f7"
-    MUTED = "#9ca8ba"
-    ACCENT = "#a78bfa"
-    SUCCESS = "#6ee7b7"
-    WARNING = "#fbbf24"
+    BG = "#0b1020"
+    PANEL = "#121a2b"
+    PANEL_ALT = "#1a2740"
+    PANEL_SOFT = "#162238"
+    TEXT = "#f4f7fb"
+    MUTED = "#9aa9bf"
+    ACCENT = "#8b9cff"
+    ACCENT_HOVER = "#aab5ff"
+    SUCCESS = "#5ee0b7"
+    WARNING = "#f8c96b"
+    DANGER = "#ff8d9e"
+    BORDER = "#263653"
 
     def __init__(self, root_dir: Path) -> None:
         super().__init__()
@@ -56,9 +60,9 @@ class ToolchainGUI(tk.Tk):
         self.request_counter = 0
         self.active_request_id = ""
 
-        self.title("ANDROID ANALYSIS · Toolchain + ADB console")
-        self.geometry("1220x820")
-        self.minsize(980, 650)
+        self.title("Android Analysis · Secure toolchain console")
+        self.geometry("1320x880")
+        self.minsize(1060, 700)
         self.configure(bg=self.BG)
         self._build_style()
         self._build_ui()
@@ -69,106 +73,151 @@ class ToolchainGUI(tk.Tk):
         style.theme_use("clam")
         style.configure("App.TFrame", background=self.BG)
         style.configure("Panel.TFrame", background=self.PANEL)
+        style.configure("Header.TFrame", background=self.BG)
+        style.configure("Card.TFrame", background=self.PANEL, relief="flat")
         style.configure("Title.TLabel", background=self.BG, foreground=self.TEXT,
-                        font=("TkDefaultFont", 20, "bold"))
+                        font=("TkDefaultFont", 24, "bold"))
+        style.configure("Eyebrow.TLabel", background=self.BG, foreground=self.ACCENT,
+                        font=("TkDefaultFont", 9, "bold"))
         style.configure("Subtitle.TLabel", background=self.BG, foreground=self.MUTED,
                         font=("TkDefaultFont", 10))
+        style.configure("Badge.TLabel", background=self.PANEL_SOFT, foreground=self.SUCCESS,
+                        padding=(10, 6), font=("TkDefaultFont", 9, "bold"))
+        style.configure("CardTitle.TLabel", background=self.PANEL, foreground=self.TEXT,
+                        font=("TkDefaultFont", 11, "bold"))
         style.configure("Panel.TLabel", background=self.PANEL, foreground=self.TEXT)
         style.configure("Muted.TLabel", background=self.PANEL, foreground=self.MUTED)
         style.configure("Section.TLabel", background=self.PANEL, foreground=self.ACCENT,
-                        font=("TkDefaultFont", 10, "bold"))
-        style.configure("Accent.TButton", background=self.ACCENT, foreground="#17121f",
-                        padding=(14, 8), font=("TkDefaultFont", 10, "bold"))
-        style.map("Accent.TButton", background=[("active", "#c4b5fd")])
+                        font=("TkDefaultFont", 9, "bold"))
+        style.configure("Accent.TButton", background=self.ACCENT, foreground="#0b1020",
+                        padding=(14, 9), font=("TkDefaultFont", 10, "bold"), borderwidth=0)
+        style.map("Accent.TButton", background=[("active", self.ACCENT_HOVER)])
         style.configure("Secondary.TButton", background=self.PANEL_ALT, foreground=self.TEXT,
-                        padding=(10, 7))
-        style.map("Secondary.TButton", background=[("active", "#30394b")])
+                        padding=(12, 8), borderwidth=0)
+        style.map("Secondary.TButton", background=[("active", "#294064")])
+        style.configure("Danger.TButton", background="#44283a", foreground=self.DANGER,
+                        padding=(12, 8), borderwidth=0)
+        style.map("Danger.TButton", background=[("active", "#5b3049")])
         style.configure("Module.TButton", background=self.PANEL_ALT, foreground=self.TEXT,
-                        anchor="w", padding=(9, 7), font=("TkDefaultFont", 10, "bold"))
-        style.map("Module.TButton", background=[("active", "#30394b")])
-        style.configure("Action.TButton", background="#252d3b", foreground=self.TEXT,
-                        anchor="w", padding=(7, 5), font=("TkDefaultFont", 9))
-        style.map("Action.TButton", background=[("active", "#39465b")])
-        style.configure("Panel.TCheckbutton", background=self.PANEL, foreground=self.TEXT)
+                        anchor="w", padding=(11, 9), font=("TkDefaultFont", 10, "bold"), borderwidth=0)
+        style.map("Module.TButton", background=[("active", "#294064")])
+        style.configure("Action.TButton", background=self.PANEL_SOFT, foreground=self.TEXT,
+                        anchor="w", padding=(9, 6), font=("TkDefaultFont", 9), borderwidth=0)
+        style.map("Action.TButton", background=[("active", "#263b5c")])
+        style.configure("Panel.TCheckbutton", background=self.PANEL, foreground=self.TEXT,
+                        font=("TkDefaultFont", 9))
         style.configure("Panel.TRadiobutton", background=self.PANEL, foreground=self.TEXT)
-        style.configure("Panel.TEntry", fieldbackground="#0d1117", foreground=self.TEXT)
-        style.configure("Panel.TCombobox", fieldbackground="#0d1117", foreground=self.TEXT)
+        style.configure("Panel.TEntry", fieldbackground="#0c1424", foreground=self.TEXT,
+                        insertcolor=self.TEXT, borderwidth=0, padding=7)
+        style.configure("Panel.TCombobox", fieldbackground="#0c1424", foreground=self.TEXT,
+                        borderwidth=0, padding=5)
+        style.configure("App.TNotebook", background=self.BG, borderwidth=0,
+                        tabmargins=(0, 0, 0, 0))
+        style.configure("App.TNotebook.Tab", background=self.PANEL, foreground=self.MUTED,
+                        padding=(18, 10), borderwidth=0, font=("TkDefaultFont", 10, "bold"))
+        style.map("App.TNotebook.Tab", background=[("selected", self.PANEL_ALT)],
+                  foreground=[("selected", self.TEXT)])
+        style.configure("App.Treeview", background="#0c1424", fieldbackground="#0c1424",
+                        foreground=self.TEXT, borderwidth=0, rowheight=28, font=("TkDefaultFont", 9))
+        style.configure("App.Treeview.Heading", background=self.PANEL_SOFT, foreground=self.MUTED,
+                        relief="flat", padding=(8, 7), font=("TkDefaultFont", 9, "bold"))
+        style.map("App.Treeview", background=[("selected", "#2a3d66")], foreground=[("selected", self.TEXT)])
 
     def _build_ui(self) -> None:
-        outer = ttk.Frame(self, style="App.TFrame", padding=22)
+        outer = ttk.Frame(self, style="App.TFrame", padding=(28, 24, 28, 18))
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="ANDROID ANALYSIS", style="Title.TLabel").pack(anchor="w")
-        ttk.Label(outer, text="Provisionamiento autorizado · módulos ADB desplegables · salida en vivo",
-                  style="Subtitle.TLabel").pack(anchor="w", pady=(2, 14))
+        header = ttk.Frame(outer, style="Header.TFrame")
+        header.pack(fill="x", pady=(0, 18))
+        brand = ttk.Frame(header, style="Header.TFrame")
+        brand.pack(side="left", anchor="w")
+        ttk.Label(brand, text="SECURE MOBILE LAB", style="Eyebrow.TLabel").pack(anchor="w", pady=(0, 3))
+        ttk.Label(brand, text="ANDROID ANALYSIS", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(brand, text="Provisionamiento autorizado · reversing · instrumentación · ADB",
+                  style="Subtitle.TLabel").pack(anchor="w", pady=(3, 0))
+        ttk.Label(header, text="●  LABORATORIO AUTORIZADO", style="Badge.TLabel").pack(
+            side="right", anchor="n", pady=(8, 0))
 
-        self.notebook = ttk.Notebook(outer)
+        self.notebook = ttk.Notebook(outer, style="App.TNotebook")
         self.notebook.pack(fill="both", expand=True)
         installer_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=(0, 12, 0, 0))
         adb_tab = ttk.Frame(self.notebook, style="App.TFrame", padding=(0, 12, 0, 0))
-        self.notebook.add(installer_tab, text="  Instalador  ")
-        self.notebook.add(adb_tab, text="  Módulos ADB  ")
+        self.notebook.add(installer_tab, text="  INSTALADOR  ")
+        self.notebook.add(adb_tab, text="  MÓDULOS ADB  ")
         self._build_installer_tab(installer_tab)
         self._build_adb_tab(adb_tab)
 
-        self.status = tk.StringVar(value="Estado: listo · no se ha ejecutado ninguna operación")
-        ttk.Label(outer, textvariable=self.status, style="Subtitle.TLabel").pack(anchor="w", pady=(10, 0))
+        status_bar = ttk.Frame(outer, style="Header.TFrame")
+        status_bar.pack(fill="x", pady=(14, 0))
+        ttk.Label(status_bar, text="●", foreground=self.SUCCESS, background=self.BG).pack(side="left", padx=(0, 7))
+        self.status = tk.StringVar(value="Listo · no se ha ejecutado ninguna operación")
+        ttk.Label(status_bar, textvariable=self.status, style="Subtitle.TLabel").pack(side="left")
+        ttk.Label(status_bar, text="v2.1.0  ·  secure provisioning", style="Subtitle.TLabel").pack(side="right")
 
     def _build_installer_tab(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=0, minsize=300)
         parent.columnconfigure(1, weight=1)
         parent.rowconfigure(0, weight=1)
-        panel = ttk.Frame(parent, style="Panel.TFrame", padding=18)
+        panel = ttk.Frame(parent, style="Card.TFrame", padding=22)
         panel.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
         panel.columnconfigure(0, weight=1)
         self._build_installer_controls(panel)
         self.installer_output = self._make_output_panel(parent, "SALIDA DEL INSTALADOR", 1)
 
     def _build_installer_controls(self, parent: ttk.Frame) -> None:
-        ttk.Label(parent, text="CONFIGURACIÓN", style="Section.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 14))
-        ttk.Label(parent, text="Alcance", style="Panel.TLabel").grid(row=1, column=0, sticky="w")
+        ttk.Label(parent, text="PROVISIONAMIENTO", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 4))
+        ttk.Label(parent, text="Prepara una estación reproducible de análisis",
+                  style="CardTitle.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 18))
+        ttk.Label(parent, text="1  ·  ALCANCE DEL LABORATORIO", style="Section.TLabel").grid(
+            row=2, column=0, sticky="w", pady=(0, 8))
         self.scope = tk.StringVar(value="static")
-        for row, value, label in ((2, "static", "Solo análisis estático"),
-                                  (3, "dynamic", "Solo dinámico / tráfico"),
-                                  (4, "all", "Cadena completa")):
+        for row, value, label in ((3, "static", "Solo análisis estático"),
+                                  (4, "dynamic", "Solo dinámico / tráfico"),
+                                  (5, "all", "Cadena completa")):
             ttk.Radiobutton(parent, text=label, value=value, variable=self.scope,
                             style="Panel.TRadiobutton").grid(row=row, column=0, sticky="w", pady=3)
-        ttk.Label(parent, text="Directorio de herramientas", style="Panel.TLabel").grid(
-            row=6, column=0, sticky="w", pady=(18, 4))
+        ttk.Label(parent, text="2  ·  DESTINO DE HERRAMIENTAS", style="Section.TLabel").grid(
+            row=7, column=0, sticky="w", pady=(20, 8))
         self.tools_dir = tk.StringVar(value=os.path.expanduser("~/security-tools"))
-        ttk.Entry(parent, textvariable=self.tools_dir, style="Panel.TEntry").grid(row=7, column=0, sticky="ew")
-        ttk.Label(parent, text="Estilo del banner", style="Panel.TLabel").grid(row=8, column=0, sticky="w", pady=(14, 4))
+        ttk.Entry(parent, textvariable=self.tools_dir, style="Panel.TEntry").grid(row=8, column=0, sticky="ew")
+        ttk.Label(parent, text="Los binarios se mantienen fuera del árbol del proyecto.",
+                  style="Muted.TLabel", wraplength=285).grid(row=9, column=0, sticky="w", pady=(5, 0))
+        ttk.Label(parent, text="3  ·  PREFERENCIAS", style="Section.TLabel").grid(
+            row=10, column=0, sticky="w", pady=(20, 8))
+        ttk.Label(parent, text="Estilo del banner", style="Panel.TLabel").grid(row=11, column=0, sticky="w", pady=(0, 4))
         self.banner_style = tk.StringVar(value="0")
         ttk.Combobox(parent, textvariable=self.banner_style, values=("0", "1", "2"),
-                     state="readonly", style="Panel.TCombobox").grid(row=9, column=0, sticky="ew")
+                     state="readonly", style="Panel.TCombobox").grid(row=12, column=0, sticky="ew")
         self.skip_apt = tk.BooleanVar(value=False)
         ttk.Checkbutton(parent, text="Omitir APT (imagen ya preparada)", variable=self.skip_apt,
-                        style="Panel.TCheckbutton").grid(row=10, column=0, sticky="w", pady=(14, 3))
+                        style="Panel.TCheckbutton").grid(row=13, column=0, sticky="w", pady=(12, 3))
         self.dry_run = tk.BooleanVar(value=True)
         ttk.Checkbutton(parent, text="Dry-run / no cambiar el host", variable=self.dry_run,
-                        style="Panel.TCheckbutton").grid(row=11, column=0, sticky="w", pady=3)
-        ttk.Separator(parent).grid(row=12, column=0, sticky="ew", pady=18)
-        ttk.Button(parent, text="Generar plan", command=self.run_plan, style="Accent.TButton").grid(
-            row=13, column=0, sticky="ew", pady=(0, 8))
+                        style="Panel.TCheckbutton").grid(row=14, column=0, sticky="w", pady=3)
+        ttk.Separator(parent).grid(row=15, column=0, sticky="ew", pady=18)
+        ttk.Button(parent, text="GENERAR PLAN  ·  DRY-RUN", command=self.run_plan, style="Accent.TButton").grid(
+            row=16, column=0, sticky="ew", pady=(0, 8))
         ttk.Button(parent, text="Ejecutar instalación", command=self.run_install, style="Secondary.TButton").grid(
-            row=14, column=0, sticky="ew", pady=(0, 8))
+            row=17, column=0, sticky="ew", pady=(0, 8))
         self.cancel_button = ttk.Button(parent, text="Cancelar proceso", command=self.cancel_process,
-                                        state="disabled", style="Secondary.TButton")
-        self.cancel_button.grid(row=15, column=0, sticky="ew")
+                                        state="disabled", style="Danger.TButton")
+        self.cancel_button.grid(row=18, column=0, sticky="ew")
         ttk.Label(parent, text="La instalación real requiere autorización vigente y puede pedir sudo.",
-                  style="Muted.TLabel", wraplength=255).grid(row=16, column=0, sticky="w", pady=(22, 0))
+                  style="Muted.TLabel", wraplength=285).grid(row=19, column=0, sticky="w", pady=(22, 0))
 
     def _make_output_panel(self, parent: ttk.Frame, title: str, column: int) -> scrolledtext.ScrolledText:
-        panel = ttk.Frame(parent, style="Panel.TFrame", padding=14)
+        panel = ttk.Frame(parent, style="Card.TFrame", padding=18)
         panel.grid(row=0, column=column, sticky="nsew")
         parent.rowconfigure(0, weight=1)
-        panel.rowconfigure(1, weight=1)
+        panel.rowconfigure(2, weight=1)
         panel.columnconfigure(0, weight=1)
-        ttk.Label(panel, text=title, style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 8))
+        ttk.Label(panel, text=title, style="Section.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 4))
+        ttk.Label(panel, text="Salida en vivo · lista para revisión y evidencia local",
+                  style="Muted.TLabel").grid(row=1, column=0, sticky="w", pady=(0, 12))
         output = scrolledtext.ScrolledText(panel, wrap="word", bg="#0d1117", fg=self.TEXT,
                                            insertbackground=self.TEXT, relief="flat", borderwidth=0,
-                                           font=("TkFixedFont", 10), padx=12, pady=12)
-        output.grid(row=1, column=0, sticky="nsew")
+                                           font=("TkFixedFont", 10), padx=14, pady=14)
+        output.grid(row=2, column=0, sticky="nsew")
         output.insert("end", "Listo. Genera un plan dry-run antes de instalar.\n")
         output.configure(state="disabled")
         return output
@@ -177,24 +226,25 @@ class ToolchainGUI(tk.Tk):
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
         parent.rowconfigure(1, weight=1)
-        header = ttk.Frame(parent, style="Panel.TFrame", padding=12)
+        header = ttk.Frame(parent, style="Card.TFrame", padding=16)
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        header.columnconfigure(1, weight=1)
-        ttk.Label(header, text="ADB", style="Section.TLabel").grid(row=0, column=0, padx=(0, 10))
-        ttk.Label(header, text="Serial opcional", style="Panel.TLabel").grid(row=0, column=1, sticky="e", padx=(0, 6))
+        header.columnconfigure(2, weight=1)
+        ttk.Label(header, text="ADB CONTROL", style="Section.TLabel").grid(row=0, column=0, padx=(0, 18))
+        ttk.Label(header, text="Serial opcional", style="Panel.TLabel").grid(row=0, column=1, sticky="e", padx=(0, 8))
         self.serial = tk.StringVar()
-        ttk.Entry(header, textvariable=self.serial, width=22, style="Panel.TEntry").grid(row=0, column=2)
-        ttk.Label(header, text="Argumentos adicionales", style="Panel.TLabel").grid(row=0, column=3, padx=(18, 6))
+        ttk.Entry(header, textvariable=self.serial, width=22, style="Panel.TEntry").grid(row=0, column=2, sticky="ew")
+        ttk.Label(header, text="Argumentos adicionales", style="Panel.TLabel").grid(row=0, column=3, padx=(20, 8))
         self.adb_args = tk.StringVar()
-        ttk.Entry(header, textvariable=self.adb_args, width=30, style="Panel.TEntry").grid(row=0, column=4)
+        ttk.Entry(header, textvariable=self.adb_args, width=30, style="Panel.TEntry").grid(row=0, column=4, sticky="ew")
         ttk.Label(header, text="Se interpretan como argumentos, no como shell.", style="Muted.TLabel").grid(
             row=1, column=0, columnspan=5, sticky="w", pady=(8, 0))
 
-        modules_panel = ttk.Frame(parent, style="Panel.TFrame", padding=10)
+        modules_panel = ttk.Frame(parent, style="Card.TFrame", padding=12)
         modules_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
         modules_panel.columnconfigure(0, weight=1)
         modules_panel.rowconfigure(0, weight=1)
-        self.module_canvas = tk.Canvas(modules_panel, bg=self.PANEL, highlightthickness=0)
+        self.module_canvas = tk.Canvas(modules_panel, bg=self.PANEL, highlightthickness=0,
+                                       borderwidth=0, relief="flat")
         scrollbar = ttk.Scrollbar(modules_panel, orient="vertical", command=self.module_canvas.yview)
         self.module_canvas.configure(yscrollcommand=scrollbar.set)
         self.module_canvas.grid(row=0, column=0, sticky="nsew")
@@ -209,13 +259,15 @@ class ToolchainGUI(tk.Tk):
         self.adb_output = self._make_adb_output_panel(parent, 1)
 
     def _make_adb_output_panel(self, parent: ttk.Frame, column: int) -> scrolledtext.ScrolledText:
-        panel = ttk.Frame(parent, style="Panel.TFrame", padding=14)
+        panel = ttk.Frame(parent, style="Card.TFrame", padding=18)
         panel.grid(row=1, column=column, sticky="nsew", padx=(10, 0) if column else (0, 10))
-        panel.rowconfigure(3, weight=1)
+        panel.rowconfigure(4, weight=1)
         panel.columnconfigure(0, weight=1)
-        ttk.Label(panel, text="PANEL DE EJECUCIÓN · PETICIONES ADB", style="Section.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(0, 8))
-        self.request_log = ttk.Treeview(panel, columns=("module", "command", "status"),
+        ttk.Label(panel, text="ACTIVIDAD ADB", style="Section.TLabel").grid(
+            row=0, column=0, sticky="w", pady=(0, 4))
+        ttk.Label(panel, text="Cada acción queda visible antes de ejecutarse.", style="Muted.TLabel").grid(
+            row=1, column=0, sticky="w", pady=(0, 12))
+        self.request_log = ttk.Treeview(panel, style="App.Treeview", columns=("module", "command", "status"),
                                         show="headings", height=6)
         self.request_log.heading("module", text="Módulo")
         self.request_log.heading("command", text="Petición")
@@ -223,13 +275,13 @@ class ToolchainGUI(tk.Tk):
         self.request_log.column("module", width=150, anchor="w")
         self.request_log.column("command", width=260, anchor="w")
         self.request_log.column("status", width=90, anchor="center")
-        self.request_log.grid(row=1, column=0, sticky="ew", pady=(0, 12))
+        self.request_log.grid(row=2, column=0, sticky="ew", pady=(0, 16))
         ttk.Label(panel, text="SALIDA DE LA PETICIÓN SELECCIONADA", style="Section.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(0, 8))
+            row=3, column=0, sticky="w", pady=(0, 8))
         output = scrolledtext.ScrolledText(panel, wrap="word", bg="#0d1117", fg=self.TEXT,
                                            insertbackground=self.TEXT, relief="flat", borderwidth=0,
-                                           font=("TkFixedFont", 10), padx=12, pady=12)
-        output.grid(row=3, column=0, sticky="nsew")
+                                           font=("TkFixedFont", 10), padx=14, pady=14)
+        output.grid(row=4, column=0, sticky="nsew")
         output.insert("end", "Selecciona una función desplegable para ejecutar una petición.\n")
         output.configure(state="disabled")
         return output
