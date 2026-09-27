@@ -10,6 +10,12 @@ Instalador Bash de toolchain Android para reversing, análisis estático, instru
 
 El código se distribuye bajo **MIT License**. Consulta el archivo `LICENSE` para el texto legal completo. El uso de funciones que envían tráfico, transmiten RF, interactúan con dispositivos, ejecutan módulos o procesan material de autenticación requiere autorización escrita independiente.
 
+## Integración continua
+
+El workflow `.github/workflows/ci.yml` se ejecuta en cada push a `main`, pull request contra `main` o lanzamiento manual desde la pestaña **Actions**. Comprueba sintaxis Bash/Python, ShellCheck, regresiones del instalador, el smoke test de Tkinter bajo Xvfb y la resolución del lockfile Python con hashes. Si todo pasa, construye el paquete Debian, inspecciona su contenido y lo publica como artefacto temporal de Actions durante 14 días.
+
+El workflow no publica releases, no modifica ramas y usa `permissions: contents: read`. El paquete descargable se obtiene desde la ejecución correspondiente de GitHub Actions.
+
 ## Estructura
 
 `src/android_toolchain/core.sh` conserva las seis fases y plan JSON; `src/no4nn.sh` resuelve el entrypoint; `tests/` conserva regresiones shell, dry-run y sintaxis de la GUI. El diagrama `assets/operation-flow.png` resume la transición operacional; el banner interno se mantiene en el entrypoint o núcleo de la herramienta.
