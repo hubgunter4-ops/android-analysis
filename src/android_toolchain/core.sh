@@ -40,6 +40,15 @@ CONNECT_TCP=""
 CONNECT_FORCE=0
 CONNECT_TIMEOUT=""
 CONNECT_CONFIRM=0
+ANALYZE_ONLY=0
+ANALYZE_DIR=""
+ANALYZE_FILES=()
+ANALYZE_OUT_DIR=""
+ANALYZE_PEDIR_BUGREPORT=0
+ANALYZE_SERIAL=""
+ANALYZE_CONFIRM=0
+ANALYZE_MAX_MUESTRAS=""
+ANALYZE_TIMEOUT=""
 SCOPE_FILE=""
 BANNER_STYLE="${BANNER_STYLE:-$((RANDOM % 3))}"
 
@@ -122,6 +131,19 @@ Auditoría ADB (no instala nada; claves RSA, depuración, red y puerto 5555):
   --connect-confirm      Confirmación explícita para forzar o conectar por TCP.
                          Sin --dry-run ni --connect-confirm esas acciones se rechazan.
                          La verificación sola no exige confirmación.
+
+  --analyze              Solo análisis de trazas; no ejecuta las fases de instalación.
+  --analyze-dir DIR      Carpeta de captura con .txt y/o .zip.
+  --analyze-file ARCHIVO Archivo .txt o .zip subido (repetible).
+  --analyze-out-dir PATH Directorio base de evidencia (default: $HOME/security-tools/analyses).
+  --analyze-pedir-bugreport
+                         Pide un bugreport al dispositivo con `adb bugreport` y lo analiza.
+  --analyze-serial SERIAL Serial del dispositivo para pedir el bugreport (alias: --serial).
+  --analyze-timeout N    Espera máxima del bugreport en segundos (default: 300).
+  --analyze-max-muestras N Muestras por clase y archivo (default: 5).
+  --analyze-confirm      Confirmación explícita para pedir un bugreport.
+                         Sin --dry-run ni --analyze-confirm la petición se rechaza.
+                         Analizar archivos ya subidos no exige confirmación.
 
 Variables:
   JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
@@ -387,6 +409,73 @@ run_connect() {
     "${args[@]}"
 }
 
+run_analyze() {
+    local -a args=(python3 "$ROOT_DIR/src/android_toolchain/analyze_traces.py")
+    [[ -n "$ANALYZE_DIR" ]] && args+=(--dir "$ANALYZE_DIR")
+    local f
+    for f in "${ANALYZE_FILES[@]}"; do args+=(--file "$f"); done
+    [[ -n "$ANALYZE_OUT_DIR" ]] && args+=(--out-dir "$ANALYZE_OUT_DIR")
+    [[ -n "$ANALYZE_MAX_MUESTRAS" ]] && args+=(--max-muestras "$ANALYZE_MAX_MUESTRAS")
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    if (( ANALYZE_PEDIR_BUGREPORT )); then
+        (( DRY_RUN )) || (( ANALYZE_CONFIRM )) \
+            || fail "--analyze-pedir-bugreport exige --analyze-confirm o --dry-run"
+        # Alcance: el serial pedido debe estar autorizado.
+        source "$ROOT_DIR/src/android_toolchain/scope.sh"
+        local scope_eff
+        scope_eff="$(scope_file_effective "$SCOPE_FILE")"
+        if [[ -n "$SCOPE_FILE" && ! -f "$SCOPE_FILE" ]]; then
+            fail "archivo de alcance no encontrado: $SCOPE_FILE"
+        fi
+        scope_check_serial "$scope_eff" "$ANALYZE_SERIAL"
+        local out_dir="${ANALYZE_OUT_DIR:-$HOME/security-tools/analyses}"
+        local fecha; fecha="$(date +%Y%m%d-%H%M%S)"
+        local zip="$out_dir/bugreport-${fecha}_${ANALYZE_SERIAL:-todos}.zip"
+        local timeout="${ANALYZE_TIMEOUT:-300}"
+        if (( DRY_RUN )); then
+            local adb_cmd="adb bugreport"
+            [[ -n "$ANALYZE_SERIAL" ]] && adb_cmd="adb -s $ANALYZE_SERIAL bugreport"
+            printf 'PLAN DE PETICIÓN DE BUGREPORT (dry-run, sin cambios)\n'
+            printf 'Versión: %s | serial: %s | timeout: %s s | salida: %s\n' \
+                "$VERSION" "${ANALYZE_SERIAL:-único dispositivo}" "$timeout" "$zip"
+            printf '  + %s %s\n' "$adb_cmd" "$zip"
+            printf '  + analizar el zip con analyze_traces.py\n'
+            return 0
+        fi
+        if (( PLAN_JSON )); then
+            printf '{"version": "%s", "pedir_bugreport": true, "serial": "%s", "timeout": %s, "salida": "%s"}\n' \
+                "$VERSION" "$ANALYZE_SERIAL" "$timeout" "$zip"
+            return 0
+        fi
+        command -v adb >/dev/null 2>&1 || fail "adb no está instalado"
+        # Estado del dispositivo: el serial debe estar en `device`.
+        local devices_line
+        devices_line="$(adb devices 2>/dev/null | tail -n +2)"
+        local state=""
+        if [[ -n "$ANALYZE_SERIAL" ]]; then
+            state="$(printf '%s\n' "$devices_line" | awk -v s="$ANALYZE_SERIAL" '$1==s {print $2}')"
+            [[ -n "$state" ]] || fail "dispositivo no visible en adb devices: $ANALYZE_SERIAL"
+            [[ "$state" == "device" ]] || fail "dispositivo no autorizado o fuera de línea: $ANALYZE_SERIAL ($state)"
+        else
+            local count
+            count="$(printf '%s\n' "$devices_line" | grep -c $'\tdevice$' || true)"
+            (( count == 1 )) || fail "sin --analyze-serial se exige un único dispositivo en estado device (hay $count)"
+            ANALYZE_SERIAL="$(printf '%s\n' "$devices_line" | awk '$2=="device" {print $1; exit}')"
+            zip="$out_dir/bugreport-${fecha}_${ANALYZE_SERIAL}.zip"
+        fi
+        mkdir -p "$out_dir"
+        printf 'Pidiendo bugreport a %s (puede tardar unos minutos)...\n' "$ANALYZE_SERIAL"
+        if ! timeout "$timeout" adb -s "$ANALYZE_SERIAL" bugreport "$zip"; then
+            fail "no se pudo pedir el bugreport a $ANALYZE_SERIAL"
+        fi
+        [[ -s "$zip" ]] || fail "el bugreport llegó vacío: $zip"
+        printf 'Bugreport guardado: %s\n' "$zip"
+        args+=(--file "$zip")
+    fi
+    "${args[@]}"
+}
+
 android_toolchain_main() {
     while (($#)); do
         case "$1" in
@@ -400,7 +489,7 @@ android_toolchain_main() {
             --interactive) INTERACTIVE=1; shift ;;
             --guided) GUIDED=1; shift ;;
             --traces) TRACES_ONLY=1; shift ;;
-            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; CONNECT_SERIAL="$2"; shift 2 ;;
+            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; CONNECT_SERIAL="$2"; ANALYZE_SERIAL="$2"; shift 2 ;;
             --traces-dir) (($# >= 2)) || fail "--traces-dir requiere PATH"; TRACES_DIR="$2"; shift 2 ;;
             --traces-sources) (($# >= 2)) || fail "--traces-sources requiere LISTA"; TRACES_SOURCES="$2"; shift 2 ;;
             --traces-confirm) TRACES_CONFIRM=1; shift ;;
@@ -419,6 +508,15 @@ android_toolchain_main() {
             --connect-force) CONNECT_FORCE=1; shift ;;
             --connect-timeout) (($# >= 2)) || fail "--connect-timeout requiere N"; CONNECT_TIMEOUT="$2"; shift 2 ;;
             --connect-confirm) CONNECT_CONFIRM=1; shift ;;
+            --analyze) ANALYZE_ONLY=1; shift ;;
+            --analyze-dir) (($# >= 2)) || fail "--analyze-dir requiere DIR"; ANALYZE_DIR="$2"; shift 2 ;;
+            --analyze-file) (($# >= 2)) || fail "--analyze-file requiere ARCHIVO"; ANALYZE_FILES+=("$2"); shift 2 ;;
+            --analyze-out-dir) (($# >= 2)) || fail "--analyze-out-dir requiere PATH"; ANALYZE_OUT_DIR="$2"; shift 2 ;;
+            --analyze-pedir-bugreport) ANALYZE_PEDIR_BUGREPORT=1; shift ;;
+            --analyze-serial) (($# >= 2)) || fail "--analyze-serial requiere SERIAL"; ANALYZE_SERIAL="$2"; shift 2 ;;
+            --analyze-timeout) (($# >= 2)) || fail "--analyze-timeout requiere N"; ANALYZE_TIMEOUT="$2"; shift 2 ;;
+            --analyze-max-muestras) (($# >= 2)) || fail "--analyze-max-muestras requiere N"; ANALYZE_MAX_MUESTRAS="$2"; shift 2 ;;
+            --analyze-confirm) ANALYZE_CONFIRM=1; shift ;;
             --scope-file) (($# >= 2)) || fail "--scope-file requiere PATH"; SCOPE_FILE="$2"; shift 2 ;;
             -h|--help) usage; return 0 ;;
             *) fail "opción desconocida: $1" ;;
@@ -429,6 +527,9 @@ android_toolchain_main() {
     (( TRACES_ONLY && AUDIT_ONLY )) && fail "--traces y --audit son excluyentes"
     (( TRACES_ONLY && CONNECT_ONLY )) && fail "--traces y --connect son excluyentes"
     (( AUDIT_ONLY && CONNECT_ONLY )) && fail "--audit y --connect son excluyentes"
+    (( TRACES_ONLY && ANALYZE_ONLY )) && fail "--traces y --analyze son excluyentes"
+    (( AUDIT_ONLY && ANALYZE_ONLY )) && fail "--audit y --analyze son excluyentes"
+    (( CONNECT_ONLY && ANALYZE_ONLY )) && fail "--connect y --analyze son excluyentes"
     if (( TRACES_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--traces no se combina con --static-only ni --dynamic-only"
         run_traces
@@ -442,6 +543,11 @@ android_toolchain_main() {
     if (( CONNECT_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--connect no se combina con --static-only ni --dynamic-only"
         run_connect
+        return $?
+    fi
+    if (( ANALYZE_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--analyze no se combina con --static-only ni --dynamic-only"
+        run_analyze
         return $?
     fi
     validate_style

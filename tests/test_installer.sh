@@ -288,6 +288,56 @@ grep -q 'Generar' src/ui/audit_view.py
 grep -q 'device_detect' src/ui/audit_view.py src/ui/traces_view.py src/ui/connect_view.py src/ui/adb_view.py
 grep -q 'wraplength' src/ui/theme.py
 
+# Apartado de análisis de trazas (carpeta, archivos subidos y bugreport).
+python3 -m py_compile src/android_toolchain/analyze_traces.py
+bash src/no4nn.sh --help | grep -q -- '--analyze'
+bash src/no4nn.sh --help | grep -q -- '--analyze-pedir-bugreport'
+python3 src/android_toolchain/analyze_traces.py --help | grep -q -- '--max-muestras'
+
+analyze_cap="$(mktemp -d)/20261115-101500_emulator-5554"
+mkdir -p "$analyze_cap"
+printf '%s\n' '11-15 10:15:00.123 12345 12345 E AndroidRuntime: FATAL EXCEPTION: main' \
+    '11-15 10:15:00.124 12345 12345 E AndroidRuntime: java.lang.OutOfMemoryError: Failed to allocate' \
+    >"$analyze_cap/03-logcat-errores.txt"
+printf '%s\n' '11-15 10:15:00.000  1000  1000 E PowerManager: 2sec_reboot detected, power status Exception' \
+    >"$analyze_cap/05-logcat-sistema.txt"
+analyze_plan="$(bash src/no4nn.sh --analyze --dry-run --analyze-dir "$analyze_cap")"
+grep -q 'PLAN DE ANÁLISIS DE TRAZAS' <<<"$analyze_plan"
+grep -q '03-logcat-errores.txt' <<<"$analyze_plan"
+analyze_out="$(mktemp -d)"
+bash src/no4nn.sh --analyze --analyze-dir "$analyze_cap" --analyze-out-dir "$analyze_out" >/dev/null
+analyze_run="$(ls -d "$analyze_out"/ANALISIS-*)"
+test -f "$analyze_run/ANALISIS.txt"
+test -f "$analyze_run/resumen.json"
+test -f "$analyze_run/MANIFIESTO.txt"
+python3 - "$analyze_run/resumen.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert d["por_clase"]["crash"] == 1, d["por_clase"]
+assert d["por_clase"]["memoria"] == 1, d["por_clase"]
+assert d["por_clase"]["reinicio-energia"] == 1, d["por_clase"]
+assert d["total_lineas"] == 3, d
+PY
+if bash src/no4nn.sh --analyze --dry-run --analyze-dir /tmp/noexiste-analisis >/dev/null 2>&1; then
+    echo 'carpeta de análisis inexistente no fue rechazada' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --analyze --connect --dry-run >/dev/null 2>&1; then
+    echo '--analyze combinado con --connect no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --analyze --analyze-pedir-bugreport --analyze-serial emulator-5554 >/dev/null 2>&1; then
+    echo 'pedir bugreport sin --confirm no fue rechazado' >&2
+    exit 1
+fi
+bash src/no4nn.sh --analyze --analyze-pedir-bugreport --analyze-serial emulator-5554 --dry-run | grep -q 'PLAN DE PETICIÓN DE BUGREPORT'
+grep -q 'AnalyzeView' src/no4nn_gui.py
+grep -q 'ANALIZAR TRAZAS' src/no4nn_gui.py
+grep -q 'Subir archivo' src/ui/analyze_view.py
+grep -q 'Solicitar bugreport' src/ui/analyze_view.py
+grep -q 'docs/analizar-trazas.md' README.md
+rm -rf "$(dirname "$analyze_cap")" "$analyze_out"
+
 # Auditoría real contra un adb falso (sin dispositivo).
 audit_bin="$(mktemp -d)"
 audit_out="$(mktemp -d)"

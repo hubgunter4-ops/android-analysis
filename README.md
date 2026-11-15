@@ -7,13 +7,13 @@
 
 ![Panel Tkinter de Android Analysis](docs/panel-tkinter.png)
 
-*Panel Tkinter con sus cinco pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB y Conexión ADB.*
+*Panel Tkinter con sus seis pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB y Analizar trazas.*
 
 ![Flujo de transición y operación](assets/operation-flow.png)
 
 ## Uso
 
-Panel gráfico (cinco pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB y Conexión ADB):
+Panel gráfico (seis pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB y Analizar trazas):
 
 ```bash
 ./install.sh --gui
@@ -41,6 +41,11 @@ sudo -E ./install.sh --static-only
 
 # Alcance de laboratorio (allowlist de seriales e IPs TCP)
 ./src/no4nn.sh --connect --dry-run --scope-file ~/security-tools/scope
+
+# Analizar trazas: clasificar capturas y bugreports por fuente, severidad y clase
+./src/no4nn.sh --analyze --dry-run --analyze-dir ~/security-tools/traces/20261115-101500_emulator-5554
+./src/no4nn.sh --analyze --analyze-file ~/Descargas/bugreport.zip
+./src/no4nn.sh --analyze --analyze-pedir-bugreport --analyze-serial emulator-5554 --analyze-confirm
 ```
 
 Las operaciones reales de trazas y auditoría exigen `--confirm` (o confirmar el diálogo en la GUI) y verifican el serial en `adb devices` sin conectar nada automáticamente. La verificación de conexión es de solo lectura y no exige confirmación; forzar o conectar por TCP sí (ver `docs/conexion-adb.md`). La evidencia queda fuera del árbol del proyecto (`~/security-tools/traces/`, `~/security-tools/audits/` y `~/security-tools/connections/`), con manifiesto y SHA-256 por archivo. El alcance de laboratorio (`~/security-tools/scope`, allowlist de seriales e IPs TCP; ver `docs/alcance-laboratorio.md`) rechaza objetivos fuera de alcance; sin ese archivo, la allowlist está inactiva y el operador responde por cada objetivo. En la GUI, el botón **Detectar** rellena el serial con el dispositivo visible, el botón **Generar** crea una semilla de aleatorización para la auditoría, y cada módulo ADB tiene un botón **Ejecutar módulo en el dispositivo** que corre sus comandos en orden con una sola confirmación.
@@ -106,6 +111,10 @@ La pestaña **TRAZAS ADB** de la GUI (o `./src/no4nn.sh --traces`) captura proce
 ### Auditoría ADB
 
 La pestaña **AUDITORÍA ADB** de la GUI (o `./src/no4nn.sh --audit`) audita un dispositivo autorizado **antes de cualquier conexión**: claves RSA autorizadas en `/data/misc/adb/adb_keys` contrastadas con la clave del operador, propiedades de depuración (`ro.debuggable`, `ro.adb.secure`, `service.adb.tcp.port`), exposición en red (interfaces y puertos en escucha), el puerto TCP 5555 (estado interno en `/proc/net/tcp` y sonda de red), fugas de datos sensibles en los registros (tokens, contraseñas, PII — el registro crudo nunca se guarda, solo conteos y muestras redactadas) y apps de terceros depurables (`pm list packages -3` cruzado con `dumpsys package`). Cada comprobación queda en su propio archivo bajo `~/security-tools/audits/AUDITORIA-<fecha>_<serial>/`, con `RESUMEN.txt` (veredicto OK / ADVERTENCIA / CRÍTICO) y `MANIFIESTO.txt`. La aleatorización (orden barajado con `--seed`, pausas aleatorias y timeout de sonda aleatorio) evita una firma predecible en la sonda; con la misma semilla, el plan y la ejecución usan el mismo orden. Consulta [docs/auditoria-adb.md](docs/auditoria-adb.md).
+
+### Analizar trazas
+
+La pestaña **ANALIZAR TRAZAS** de la GUI (o `./src/no4nn.sh --analyze`) clasifica trazas ya capturadas o archivos subidos (`.txt` o `bugreport.zip`) por fuente, severidad y clase: reinicio/energía, crash, ANR, memoria, permisos, red, almacenamiento, kernel y proceso. También puede pedir un bugreport al dispositivo (`--analyze-pedir-bugreport`, exige `--analyze-confirm` y un dispositivo autorizado) y analizarlo solo. Cada análisis deja `ANALISIS.txt`, `resumen.json` y `MANIFIESTO.txt` en `~/security-tools/analyses/ANALISIS-<fecha>_<etiqueta>/`. El análisis es de solo lectura sobre la entrada y solo muestra conteos y muestras de una línea; el crudo nunca se copia al reporte. Consulta [docs/analizar-trazas.md](docs/analizar-trazas.md).
 
 ## Integración con Ubuntu
 

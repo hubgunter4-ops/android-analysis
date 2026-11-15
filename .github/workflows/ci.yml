@@ -38,7 +38,7 @@ jobs:
 
       - name: Validate Python and shell syntax
         run: |
-          python -m py_compile src/no4nn_gui.py src/ui/*.py
+          python -m py_compile src/no4nn_gui.py src/ui/*.py src/android_toolchain/analyze_traces.py
           bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh
           shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh
 
@@ -55,9 +55,10 @@ jobs:
           app = ToolchainGUI(Path.cwd())
           app.update_idletasks()
           app.update()
-          assert app.notebook.index("end") == 5
+          assert app.notebook.index("end") == 6
           assert "TRAZAS" in app.notebook.tab(2, "text")
           assert "AUDITOR" in app.notebook.tab(3, "text")
+          assert "ANALIZAR" in app.notebook.tab(5, "text")
           assert "CONEXI" in app.notebook.tab(4, "text")
           assert len(app.traces_view.selected_sources()) == 8
           assert "bugreport" not in app.traces_view.selected_sources()
@@ -85,6 +86,14 @@ jobs:
           wait_text(app.audit_view.output, "PLAN DE AUDITOR")
           app.connect_view.run_preview()
           wait_text(app.connect_view.output, "PLAN DE CONEXIÓN ADB")
+          import os
+          cap = Path.home() / "security-tools" / "traces" / "20261115-101500_emulator-5554"
+          cap.mkdir(parents=True, exist_ok=True)
+          (cap / "03-logcat-errores.txt").write_text(
+              "11-15 10:15:00.123 12345 12345 E AndroidRuntime: FATAL EXCEPTION: main\n")
+          app.analyze_view.input_dir.set(str(cap))
+          app.analyze_view.run_preview()
+          wait_text(app.analyze_view.output, "PLAN DE ANÁLISIS DE TRAZAS")
           app.installer_view.run_plan()
           wait_text(app.installer_view.output, '"phases"')
           app.destroy()
@@ -137,6 +146,8 @@ jobs:
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/audit_view.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/connect_view.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/device_detect.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/analyze_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/analyze_traces.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/connect.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/scope.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
@@ -145,6 +156,7 @@ jobs:
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/auditoria-adb.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/conexion-adb.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/alcance-laboratorio.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/analizar-trazas.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/copyright'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/changelog.Debian.gz'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'
