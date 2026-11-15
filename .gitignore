@@ -5,9 +5,12 @@ __pycache__/
 .pytest_cache/
 .env
 *.apk
+!android-app/app-debug.apk
+*.idsig
 *.aab
 *.dex
 *.jar
+!android-app/gradle/wrapper/gradle-wrapper.jar
 *.pcap
 *.pcapng
 *.log
