@@ -140,12 +140,17 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install SDK platform and build-tools
+      - name: Use preinstalled Android SDK
         run: |
-          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+          # El runner ya trae el SDK en /usr/local/lib/android/sdk; la acción
+          # setup-android@v3 falla porque `sdkmanager --licenses` pide
+          # confirmación interactiva (y/N) y recibe EOF (exit code 1).
+          # Aquí se aceptan las licencias con `yes |` (no interactivo).
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
+          SDK=/usr/local/lib/android/sdk
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build debug APK
         run: |
