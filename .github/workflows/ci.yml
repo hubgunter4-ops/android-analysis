@@ -126,6 +126,8 @@ jobs:
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/traces_view.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/trazas-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/copyright'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/changelog.Debian.gz'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rw-r--r--.*requirements.lock'
           lintian --fail-on error android-analysis-toolchain_2.1.0_all.deb

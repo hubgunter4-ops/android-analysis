@@ -16,6 +16,10 @@ find "$STAGE_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
 # (p. ej. clones con 2770); normaliza los directorios a 0755.
 find "$STAGE_DIR" -type d -exec chmod 0755 {} +
 find "$STAGE_DIR/usr/share/android-analysis" -type f -exec chmod 0644 {} +
+# lintian exige el changelog comprimido como changelog.Debian.gz.
+gzip -9 -n -c "$STAGE_DIR/usr/share/doc/android-analysis-toolchain/changelog" \
+    > "$STAGE_DIR/usr/share/doc/android-analysis-toolchain/changelog.Debian.gz"
+rm -f "$STAGE_DIR/usr/share/doc/android-analysis-toolchain/changelog"
 chmod 755 \
     "$STAGE_DIR/usr/bin/android-analysis" \
     "$STAGE_DIR/DEBIAN/postinst" \
@@ -24,5 +28,5 @@ chmod 755 \
     "$STAGE_DIR/usr/share/android-analysis/src/no4nn_gui.py" \
     "$STAGE_DIR/usr/share/android-analysis/install.sh"
 
-dpkg-deb --build "$STAGE_DIR" "$OUTPUT"
+dpkg-deb --build --root-owner-group "$STAGE_DIR" "$OUTPUT"
 printf 'Paquete creado: %s\n' "$OUTPUT"

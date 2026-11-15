@@ -1,0 +1,8 @@
+android-analysis-toolchain (2.1.0) unstable; urgency=medium
+
+  * Apartado de trazas ADB: procesos, fallos/errores y registro del kernel.
+  * Pestana TRAZAS ADB en la GUI y CLI --traces.
+  * CI: cache de pip retirada del job de tests; paquete Debian con
+    copyright, changelog y propietarios root.
+
+ -- hubgunter4-ops <2.72937384e+08+hubgunter4-ops@users.noreply.github.com>  Sun, 15 Nov 2026 10:05:00 -0600

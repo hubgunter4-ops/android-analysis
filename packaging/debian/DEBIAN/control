@@ -3,7 +3,7 @@ Version: 2.1.0
 Section: devel
 Priority: optional
 Architecture: all
-Depends: bash, python3 (>= 3.10), python3-tk, android-tools-adb
-Maintainer: Android Analysis Maintainers
+Depends: python3 (>= 3.10), python3-tk, android-tools-adb
+Maintainer: hubgunter4-ops <2.72937384e+08+hubgunter4-ops@users.noreply.github.com>
 Description: Authorized Android analysis toolchain GUI
  Native Tkinter interface for authorized Android analysis, ADB and instrumentation workflows.
