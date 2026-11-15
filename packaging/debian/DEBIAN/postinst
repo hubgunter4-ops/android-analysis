@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 chmod 755 /usr/share/android-analysis/src/no4nn.sh
+chmod 755 /usr/share/android-analysis/src/android_toolchain/traces.sh
 chmod 755 /usr/share/android-analysis/install.sh
 chmod 755 /usr/share/android-analysis/src/no4nn_gui.py
 chmod 755 /usr/bin/android-analysis

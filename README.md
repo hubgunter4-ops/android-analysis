@@ -56,6 +56,10 @@ La interfaz de línea de comandos actual es **v2.1.0**. Se consulta con:
 
 El CLI soporta `--dry-run`, `--plan-json`, `--static-only`, `--dynamic-only`, `--skip-apt`, `--interactive`, `--guided` y `--gui`. La versión también aparece en el banner como `Version 2.1.0`.
 
+### Trazas ADB
+
+La pestaña **TRAZAS ADB** de la GUI (o `./src/no4nn.sh --traces`) captura procesos, fallos/errores y el registro del kernel de un dispositivo de laboratorio autorizado, cada fuente en su propio archivo bajo `~/security-tools/traces/<fecha>_<serial>/`, con `MANIFIESTO.txt` (comando, código, bytes y SHA-256 por fuente). Incluye `ps -A`, `top`, logcat de errores y de crashes, logcat del sistema, `dmesg`, el kernel anterior vía `pstore` (con fallback legacy a `/proc/last_kmsg`), `dumpsys dropbox` (fallos y ANR) y, solo si se pide, `bugreport`. Revisa siempre el plan con `--dry-run` primero; la captura real exige `--confirm` (o confirmar el diálogo en la GUI) y verifica el serial en `adb devices` sin conectar nada automáticamente. Consulta [docs/trazas-adb.md](docs/trazas-adb.md).
+
 ## Integración con Ubuntu
 
 El repositorio incluye un icono SVG, un archivo `.desktop` y un paquete Debian versionado. Puedes consultar directamente el [paquete `.deb` v2.1.0](android-analysis-toolchain_2.1.0_all.deb), el [lanzador `.desktop`](packaging/debian/usr/share/applications/android-analysis.desktop), el [icono SVG](packaging/debian/usr/share/icons/hicolor/scalable/apps/android-analysis.svg) y el [script de construcción](packaging/build-deb.sh).

@@ -12,12 +12,14 @@ try:
     from ui.diagnostics import run as run_diagnostics
     from ui.installer_view import InstallerView
     from ui.process_runner import ProcessRunner
+    from ui.traces_view import TracesView
 except ModuleNotFoundError:  # Importación como ``src.no4nn_gui`` durante pruebas.
     from src.ui import theme
     from src.ui.adb_view import ADBView
     from src.ui.diagnostics import run as run_diagnostics
     from src.ui.installer_view import InstallerView
     from src.ui.process_runner import ProcessRunner
+    from src.ui.traces_view import TracesView
 
 
 class ToolchainGUI(tk.Tk):
@@ -56,10 +58,13 @@ class ToolchainGUI(tk.Tk):
         self.notebook = notebook
         installer_tab = InstallerView(notebook, self.start_process, self.cancel_process, self.show_diagnostics)
         adb_tab = ADBView(notebook, self.root_dir / "docs" / "Funciones_de_ADB_por_módulo.md", self.start_process)
+        traces_tab = TracesView(notebook, self.start_process, self.cancel_process)
         notebook.add(installer_tab, text="  INSTALADOR  ")
         notebook.add(adb_tab, text="  MÓDULOS ADB  ")
+        notebook.add(traces_tab, text="  TRAZAS ADB  ")
         self.installer_view = installer_tab
         self.adb_view = adb_tab
+        self.traces_view = traces_tab
 
         status_bar = ttk.Frame(outer, style="Header.TFrame")
         status_bar.pack(fill="x", pady=(14, 0))
@@ -86,8 +91,10 @@ class ToolchainGUI(tk.Tk):
         self._set_output(output, rendered)
         self.status.set(f"En curso · {label}")
         self.installer_view.set_running(True)
+        self.traces_view.set_running(True)
         if not self.runner.start(command):
             self.installer_view.set_running(False)
+            self.traces_view.set_running(False)
             self.status.set("No se pudo iniciar el proceso")
 
     @staticmethod
@@ -104,9 +111,11 @@ class ToolchainGUI(tk.Tk):
             self._append_output(self.active_output, value)
         elif kind == "done":
             self.installer_view.set_running(False)
+            self.traces_view.set_running(False)
             self.status.set(f"Terminado · código {value}")
         elif kind == "error":
             self.installer_view.set_running(False)
+            self.traces_view.set_running(False)
             if self.active_output is not None:
                 self._append_output(self.active_output, f"Error al iniciar el proceso: {value}\n")
             self.status.set("Error al iniciar el proceso")

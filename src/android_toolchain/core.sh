@@ -20,6 +20,11 @@ STATIC_ONLY=0
 DYNAMIC_ONLY=0
 SKIP_APT=0
 PLAN_JSON=0
+TRACES_ONLY=0
+TRACES_SERIAL=""
+TRACES_DIR=""
+TRACES_SOURCES=""
+TRACES_CONFIRM=0
 BANNER_STYLE="${BANNER_STYLE:-$((RANDOM % 3))}"
 
 banner() {
@@ -71,6 +76,14 @@ Uso: no4nn.sh [opciones]
   --gui                  Abre la interfaz Tkinter (equivale a ./install.sh --gui).
   -h, --help             Muestra esta ayuda.
 
+Trazas ADB (no instala nada; captura procesos, fallos y kernel):
+  --traces               Solo trazas; no ejecuta las fases de instalación.
+  --traces-serial SERIAL Serial del dispositivo (verificado en `adb devices`; alias: --serial).
+  --traces-dir PATH      Directorio base de evidencia (default: $HOME/security-tools/traces).
+  --traces-sources LISTA Fuentes separadas por coma (ver traces.sh --help).
+  --traces-confirm       Confirmación explícita para una captura real.
+                         Sin --dry-run ni --traces-confirm la captura se rechaza.
+
 Variables:
   JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
   TOOLS_DIR               Igual que --tools-dir.
@@ -79,6 +92,8 @@ Ejemplos:
   ./src/no4nn.sh --dry-run --static-only
   ./src/no4nn.sh --plan-json --dynamic-only --tools-dir /opt/security-tools
   sudo -E ./src/no4nn.sh --tools-dir "$HOME/security-tools" --banner-style 1
+  ./src/no4nn.sh --traces --dry-run --serial emulator-5554
+  ./src/no4nn.sh --traces --serial emulator-5554 --traces-confirm
 EOF
 }
 
@@ -128,6 +143,7 @@ guided_flow() {
     cat <<'EOF'
 Flujo ANDROID ANALYSIS: scope -> base/ADB -> APK tools -> static -> dynamic/Frida -> traffic -> summary.
 [1] static-only: reversing y análisis estático; [2] dynamic-only: ADB/instrumentación; [3] all: cadena completa.
+Trazas: --traces --dry-run revisa el plan (procesos, logcat, dmesg, pstore, dropbox) y --traces-confirm captura a archivos.
 El modo guiado no instala nada. El modo interactivo pregunta si debe permanecer en dry-run antes de ejecutar.
 EOF
 }
@@ -291,6 +307,17 @@ summary() {
 EOF
 }
 
+run_traces() {
+    local -a args=(bash "$ROOT_DIR/src/android_toolchain/traces.sh")
+    [[ -n "$TRACES_SERIAL" ]] && args+=(--serial "$TRACES_SERIAL")
+    [[ -n "$TRACES_DIR" ]] && args+=(--out-dir "$TRACES_DIR")
+    [[ -n "$TRACES_SOURCES" ]] && args+=(--sources "$TRACES_SOURCES")
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    (( TRACES_CONFIRM )) && args+=(--confirm)
+    "${args[@]}"
+}
+
 android_toolchain_main() {
     while (($#)); do
         case "$1" in
@@ -303,12 +330,22 @@ android_toolchain_main() {
             --banner-style) (($# >= 2)) || fail "--banner-style requiere 0, 1 o 2"; BANNER_STYLE="$2"; shift 2 ;;
             --interactive) INTERACTIVE=1; shift ;;
             --guided) GUIDED=1; shift ;;
+            --traces) TRACES_ONLY=1; shift ;;
+            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; shift 2 ;;
+            --traces-dir) (($# >= 2)) || fail "--traces-dir requiere PATH"; TRACES_DIR="$2"; shift 2 ;;
+            --traces-sources) (($# >= 2)) || fail "--traces-sources requiere LISTA"; TRACES_SOURCES="$2"; shift 2 ;;
+            --traces-confirm) TRACES_CONFIRM=1; shift ;;
             -h|--help) usage; return 0 ;;
             *) fail "opción desconocida: $1" ;;
         esac
     done
 
     (( STATIC_ONLY && DYNAMIC_ONLY )) && fail "--static-only y --dynamic-only son excluyentes"
+    if (( TRACES_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--traces no se combina con --static-only ni --dynamic-only"
+        run_traces
+        return $?
+    fi
     validate_style
     validate_checksum
     validate_path "$TOOLS_DIR"

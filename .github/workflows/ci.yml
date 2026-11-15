@@ -41,8 +41,8 @@ jobs:
       - name: Validate Python and shell syntax
         run: |
           python -m py_compile src/no4nn_gui.py src/ui/*.py
-          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh
-          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh
+          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh
+          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh
 
       - name: Run regression tests
         run: bash tests/test_installer.sh
@@ -50,17 +50,35 @@ jobs:
       - name: Run modular GUI smoke test
         run: |
           xvfb-run -a python - <<'PY'
+          import time
           from pathlib import Path
           from src.no4nn_gui import ToolchainGUI
 
           app = ToolchainGUI(Path.cwd())
           app.update_idletasks()
           app.update()
-          assert app.notebook.index("end") == 2
+          assert app.notebook.index("end") == 3
+          assert "TRAZAS" in app.notebook.tab(2, "text")
+          assert len(app.traces_view.selected_sources()) == 8
+          assert "bugreport" not in app.traces_view.selected_sources()
           app.show_diagnostics()
           app.update()
           assert "Diagnóstico" in app.status.get()
           assert app.installer_view.output.get("1.0", "end").strip()
+
+          def wait_text(widget, text, timeout=15):
+              end = time.time() + timeout
+              while time.time() < end:
+                  app.update()
+                  if text in widget.get("1.0", "end"):
+                      return
+                  time.sleep(0.05)
+              raise AssertionError(f"sin {text!r} en la salida")
+
+          app.traces_view.run_preview()
+          wait_text(app.traces_view.output, "PLAN DE TRAZAS")
+          app.installer_view.run_plan()
+          wait_text(app.installer_view.output, '"phases"')
           app.destroy()
           print("GUI smoke test: OK")
           PY
@@ -107,6 +125,9 @@ jobs:
           dpkg-deb --info android-analysis-toolchain_2.1.0_all.deb
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/diagnostics.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/traces_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/trazas-adb.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rw-r--r--.*requirements.lock'
           lintian --fail-on error android-analysis-toolchain_2.1.0_all.deb

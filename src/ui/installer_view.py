@@ -11,7 +11,7 @@ from .diagnostics import Diagnostic
 
 
 class InstallerView(ttk.Frame):
-    def __init__(self, parent: tk.Misc, on_start: Callable[[list[str], str], None],
+    def __init__(self, parent: tk.Misc, on_start: Callable[[list[str], str, tk.Text], None],
                  on_cancel: Callable[[], None], on_diagnostics: Callable[[], None]) -> None:
         super().__init__(parent, style="App.TFrame", padding=(0, 12, 0, 0))
         self.on_start = on_start
@@ -82,15 +82,15 @@ class InstallerView(ttk.Frame):
         return command
 
     def run_plan(self) -> None:
-        self.on_start(self.command() + ["--dry-run", "--plan-json"], "generando plan")
+        self.on_start(self.command() + ["--dry-run", "--plan-json"], "generando plan", self.output)
 
     def run_install(self) -> None:
         if self.dry_run.get():
-            self.on_start(self.command() + ["--dry-run"], "simulando instalación")
+            self.on_start(self.command() + ["--dry-run"], "simulando instalación", self.output)
         elif messagebox.askyesno("Confirmar instalación",
                                  "Esto ejecutará cambios en el host y puede usar sudo.\n\n"
                                  "Confirma autorización escrita y alcance correcto.", icon="warning"):
-            self.on_start(self.command(), "instalando")
+            self.on_start(self.command(), "instalando", self.output)
 
     def set_running(self, running: bool) -> None:
         self.cancel_button.configure(state="normal" if running else "disabled")

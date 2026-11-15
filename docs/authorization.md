@@ -10,3 +10,4 @@ La preparación del host no autoriza por sí misma a instalar un certificado pro
 | ADB | Serial/emulador y consentimiento para Depuración USB. |
 | Dinámica | App de prueba, usuario de laboratorio y comandos permitidos. |
 | Tráfico | Red aislada, proxy/certificado y dominios de prueba. |
+| Trazas ADB | Serial/emulador, consentimiento para Depuración USB y retención de logs: logcat, dmesg y bugreport pueden contener datos personales o credenciales. |
