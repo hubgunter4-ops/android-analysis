@@ -39,8 +39,8 @@ jobs:
       - name: Validate Python and shell syntax
         run: |
           python -m py_compile src/no4nn_gui.py src/ui/*.py src/android_toolchain/analyze_traces.py
-          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh src/android_toolchain/apps.sh src/android_toolchain/encrypt.sh
-          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh src/android_toolchain/apps.sh src/android_toolchain/encrypt.sh
+          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh src/android_toolchain/apps.sh
+          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh src/android_toolchain/apps.sh
 
       - name: Run regression tests
         run: bash tests/test_installer.sh
@@ -55,12 +55,11 @@ jobs:
           app = ToolchainGUI(Path.cwd())
           app.update_idletasks()
           app.update()
-          assert app.notebook.index("end") == 8
+          assert app.notebook.index("end") == 7
           assert "TRAZAS" in app.notebook.tab(2, "text")
           assert "AUDITOR" in app.notebook.tab(3, "text")
           assert "ANALIZAR" in app.notebook.tab(5, "text")
-          assert "ENCRYPT" in app.notebook.tab(6, "text")
-          assert "APPS" in app.notebook.tab(7, "text")
+          assert "APPS" in app.notebook.tab(6, "text")
           assert "CONEXI" in app.notebook.tab(4, "text")
           assert len(app.traces_view.selected_sources()) == 8
           assert "bugreport" not in app.traces_view.selected_sources()
@@ -82,12 +81,26 @@ jobs:
                   time.sleep(0.05)
               raise AssertionError(f"sin {text!r} en la salida")
 
+          def wait_idle(timeout=15):
+              # El texto de la vista previa aparece antes de que el proceso
+              # termine: sin esperar, el siguiente arranque choca con el
+              # diálogo modal "Proceso ocupado" y el humo se cuelga.
+              end = time.time() + timeout
+              while time.time() < end:
+                  app.update()
+                  if not app.runner.running: return
+                  time.sleep(0.05)
+              raise AssertionError("el proceso anterior no terminó")
+
           app.traces_view.run_preview()
           wait_text(app.traces_view.output, "PLAN DE TRAZAS")
+          wait_idle()
           app.audit_view.run_preview()
           wait_text(app.audit_view.output, "PLAN DE AUDITOR")
+          wait_idle()
           app.connect_view.run_preview()
           wait_text(app.connect_view.output, "PLAN DE CONEXIÓN ADB")
+          wait_idle()
           import os
           cap = Path.home() / "security-tools" / "traces" / "20261115-101500_emulator-5554"
           cap.mkdir(parents=True, exist_ok=True)
@@ -96,10 +109,10 @@ jobs:
           app.analyze_view.input_dir.set(str(cap))
           app.analyze_view.run_preview()
           wait_text(app.analyze_view.output, "PLAN DE ANÁLISIS DE TRAZAS")
+          wait_idle()
           app.apps_view.run_preview()
           wait_text(app.apps_view.output, "PLAN DE APPS ADB")
-          app.encrypt_view.run_preview()
-          wait_text(app.encrypt_view.output, "PLAN DE ENCRYPT")
+          wait_idle()
           app.installer_view.run_plan()
           wait_text(app.installer_view.output, '"phases"')
           app.destroy()
@@ -126,52 +139,6 @@ jobs:
           grep -q -- '--hash=sha256:' requirements.lock
           python -m pip install --dry-run --ignore-installed --require-hashes --requirement requirements.lock
 
-  android-app:
-    name: Build DeviceCrypt APK
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Use preinstalled Android SDK
-        run: |
-          # El runner ya trae el SDK en /usr/local/lib/android/sdk; la acción
-          # setup-android@v3 falla porque `sdkmanager --licenses` pide
-          # confirmación interactiva (y/N) y recibe EOF (exit code 1).
-          # Aquí se aceptan las licencias con `yes |` (no interactivo).
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> "$GITHUB_ENV"
-          SDK=/usr/local/lib/android/sdk
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" --licenses
-          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
-
-      - name: Build debug APK
-        run: |
-          cd android-app
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Verify APK exists and is signed
-        run: |
-          test -s android-app/app/build/outputs/apk/debug/app-debug.apk
-          ls -la android-app/app/build/outputs/apk/debug/app-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify android-app/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload DeviceCrypt APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: devicecrypt-apk-${{ github.sha }}
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 14
-
   package:
     name: Build Debian package
     needs: [test, dependency-lock]
@@ -191,44 +158,37 @@ jobs:
 
       - name: Verify package contents and metadata
         run: |
-          dpkg-deb --info android-analysis-toolchain_2.2.0_all.deb
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/diagnostics.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/traces_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/audit_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/connect_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/device_detect.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/analyze_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/apps_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/encrypt_view.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/encrypt.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/encrypt-android.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/android-app/app-debug.apk'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*android-app/build-local.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*android-app/gradlew'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/android-app/app/src/main/java/com/zapia/devicecrypt/MainActivity.java'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/apps.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/analyze_traces.py'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/connect.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/scope.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/audit.sh'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/trazas-adb.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/auditoria-adb.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/conexion-adb.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/alcance-laboratorio.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/analizar-trazas.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/docs/apps-uso-conexiones.md'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/copyright'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/changelog.Debian.gz'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'
-          dpkg-deb --contents android-analysis-toolchain_2.2.0_all.deb | grep -q -- '-rw-r--r--.*requirements.lock'
-          lintian --fail-on error android-analysis-toolchain_2.2.0_all.deb
+          dpkg-deb --info android-analysis-toolchain_2.1.0_all.deb
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/diagnostics.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/traces_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/audit_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/connect_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/device_detect.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/analyze_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/apps_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/apps.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/analyze_traces.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/connect.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/scope.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/audit.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/trazas-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/auditoria-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/conexion-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/alcance-laboratorio.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/analizar-trazas.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/apps-uso-conexiones.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/copyright'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/changelog.Debian.gz'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rw-r--r--.*requirements.lock'
+          lintian --fail-on error android-analysis-toolchain_2.1.0_all.deb
 
       - name: Upload Debian package artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-analysis-toolchain-${{ github.sha }}
-          path: android-analysis-toolchain_2.2.0_all.deb
+          path: android-analysis-toolchain_2.1.0_all.deb
           if-no-files-found: error
           retention-days: 14

@@ -3,14 +3,14 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMPLATE_DIR="$ROOT_DIR/packaging/debian"
-VERSION="${1:-2.2.0}"
+VERSION="${1:-2.1.0}"
 OUTPUT="$ROOT_DIR/android-analysis-toolchain_${VERSION}_all.deb"
 STAGE_DIR="$(mktemp -d)"
 trap 'rm -rf "$STAGE_DIR"' EXIT
 
 cp -a "$TEMPLATE_DIR/." "$STAGE_DIR/"
 mkdir -p "$STAGE_DIR/usr/share/android-analysis"
-cp -r "$ROOT_DIR/src" "$ROOT_DIR/docs" "$ROOT_DIR/android-app" "$ROOT_DIR/install.sh" "$ROOT_DIR/requirements.txt" "$ROOT_DIR/requirements.in" "$ROOT_DIR/requirements.lock" "$STAGE_DIR/usr/share/android-analysis/"
+cp -r "$ROOT_DIR/src" "$ROOT_DIR/docs" "$ROOT_DIR/install.sh" "$ROOT_DIR/requirements.txt" "$ROOT_DIR/requirements.in" "$ROOT_DIR/requirements.lock" "$STAGE_DIR/usr/share/android-analysis/"
 find "$STAGE_DIR" -type d -name '__pycache__' -prune -exec rm -rf {} +
 # dpkg-deb rechaza directorios con permisos de grupo de escritura/setgid
 # (p. ej. clones con 2770); normaliza los directorios a 0755.
@@ -29,9 +29,6 @@ chmod 755 \
     "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/connect.sh" \
     "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/analyze_traces.py" \
     "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/apps.sh" \
-    "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/encrypt.sh" \
-    "$STAGE_DIR/usr/share/android-analysis/android-app/build-local.sh" \
-    "$STAGE_DIR/usr/share/android-analysis/android-app/gradlew" \
     "$STAGE_DIR/usr/share/android-analysis/src/no4nn_gui.py" \
     "$STAGE_DIR/usr/share/android-analysis/install.sh"
 
