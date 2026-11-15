@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -10,6 +11,7 @@ try:
     from ui import theme
     from ui.adb_view import ADBView
     from ui.audit_view import AuditView
+    from ui.connect_view import ConnectView
     from ui.diagnostics import run as run_diagnostics
     from ui.installer_view import InstallerView
     from ui.process_runner import ProcessRunner
@@ -18,6 +20,7 @@ except ModuleNotFoundError:  # Importación como ``src.no4nn_gui`` durante prueb
     from src.ui import theme
     from src.ui.adb_view import ADBView
     from src.ui.audit_view import AuditView
+    from src.ui.connect_view import ConnectView
     from src.ui.diagnostics import run as run_diagnostics
     from src.ui.installer_view import InstallerView
     from src.ui.process_runner import ProcessRunner
@@ -31,12 +34,13 @@ class ToolchainGUI(tk.Tk):
         super().__init__()
         self.root_dir = root_dir
         self.title("Android Analysis · Secure toolchain console")
-        self.geometry("1320x960")
+        self.geometry("1280x960")
         self.minsize(1060, 760)
         self.configure(bg=theme.BG)
         theme.configure(self)
         self.status = tk.StringVar(value="Listo · diagnóstico inicial pendiente")
         self.active_output: tk.Text | None = None
+        self.process_done_hook: Callable[[], None] | None = None
         self.runner = ProcessRunner(root_dir, self._process_event)
         self._build_ui()
         self.after(180, self.show_diagnostics)
@@ -59,17 +63,21 @@ class ToolchainGUI(tk.Tk):
         notebook.pack(fill="both", expand=True)
         self.notebook = notebook
         installer_tab = InstallerView(notebook, self.start_process, self.cancel_process, self.show_diagnostics)
-        adb_tab = ADBView(notebook, self.root_dir / "docs" / "Funciones_de_ADB_por_módulo.md", self.start_process)
+        adb_tab = ADBView(notebook, self.root_dir / "docs" / "Funciones_de_ADB_por_módulo.md",
+                          self.start_process, self.set_process_done_hook)
         traces_tab = TracesView(notebook, self.start_process, self.cancel_process)
         audit_tab = AuditView(notebook, self.start_process, self.cancel_process)
+        connect_tab = ConnectView(notebook, self.start_process, self.cancel_process)
         notebook.add(installer_tab, text="  INSTALADOR  ")
         notebook.add(adb_tab, text="  MÓDULOS ADB  ")
         notebook.add(traces_tab, text="  TRAZAS ADB  ")
         notebook.add(audit_tab, text="  AUDITORÍA ADB  ")
+        notebook.add(connect_tab, text="  CONEXIÓN ADB  ")
         self.installer_view = installer_tab
         self.adb_view = adb_tab
         self.traces_view = traces_tab
         self.audit_view = audit_tab
+        self.connect_view = connect_tab
 
         status_bar = ttk.Frame(outer, style="Header.TFrame")
         status_bar.pack(fill="x", pady=(14, 0))
@@ -87,10 +95,18 @@ class ToolchainGUI(tk.Tk):
         warnings = sum(item.state == "WARN" for item in diagnostics)
         self.status.set("Diagnóstico completado · %d advertencia(s)" % warnings if warnings else "Diagnóstico completado · entorno listo")
 
-    def start_process(self, command: list[str], label: str, output: tk.Text) -> None:
+    def set_process_done_hook(self, hook: Callable[[], None] | None) -> None:
+        """Registra una acción a ejecutar cuando termine el proceso actual.
+
+        La usa la pestaña MÓDULOS ADB para encadenar los comandos de un
+        módulo. Se limpia sola al dispararse y al cancelar.
+        """
+        self.process_done_hook = hook
+
+    def start_process(self, command: list[str], label: str, output: tk.Text) -> bool:
         if self.runner.running:
             messagebox.showinfo("Proceso ocupado", "Espera a que termine el proceso actual.")
-            return
+            return False
         self.active_output = output
         rendered = "$ " + " ".join(self._quote(part) for part in command) + "\n\n"
         self._set_output(output, rendered)
@@ -98,11 +114,15 @@ class ToolchainGUI(tk.Tk):
         self.installer_view.set_running(True)
         self.traces_view.set_running(True)
         self.audit_view.set_running(True)
+        self.connect_view.set_running(True)
         if not self.runner.start(command):
             self.installer_view.set_running(False)
             self.traces_view.set_running(False)
             self.audit_view.set_running(False)
+            self.connect_view.set_running(False)
             self.status.set("No se pudo iniciar el proceso")
+            return False
+        return True
 
     @staticmethod
     def _quote(value: str) -> str:
@@ -110,6 +130,8 @@ class ToolchainGUI(tk.Tk):
         return shlex.quote(value)
 
     def cancel_process(self) -> None:
+        self.process_done_hook = None
+        self.adb_view.cancel_module_run()
         self.runner.cancel()
         self.status.set("Cancelando proceso…")
 
@@ -120,14 +142,23 @@ class ToolchainGUI(tk.Tk):
             self.installer_view.set_running(False)
             self.traces_view.set_running(False)
             self.audit_view.set_running(False)
+            self.connect_view.set_running(False)
             self.status.set(f"Terminado · código {value}")
+            self._fire_done_hook()
         elif kind == "error":
             self.installer_view.set_running(False)
             self.traces_view.set_running(False)
             self.audit_view.set_running(False)
+            self.connect_view.set_running(False)
             if self.active_output is not None:
                 self._append_output(self.active_output, f"Error al iniciar el proceso: {value}\n")
             self.status.set("Error al iniciar el proceso")
+            self._fire_done_hook()
+
+    def _fire_done_hook(self) -> None:
+        hook, self.process_done_hook = self.process_done_hook, None
+        if hook is not None:
+            hook()
 
     def _drain_runner(self) -> None:
         self.runner.drain()

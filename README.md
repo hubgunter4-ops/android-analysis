@@ -7,13 +7,13 @@
 
 ![Panel Tkinter de Android Analysis](docs/panel-tkinter.png)
 
-*Panel Tkinter con sus cuatro pestañas: Instalador, Módulos ADB, Trazas ADB y Auditoría ADB.*
+*Panel Tkinter con sus cinco pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB y Conexión ADB.*
 
 ![Flujo de transición y operación](assets/operation-flow.png)
 
 ## Uso
 
-Panel gráfico (cuatro pestañas: Instalador, Módulos ADB, Trazas ADB y Auditoría ADB):
+Panel gráfico (cinco pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB y Conexión ADB):
 
 ```bash
 ./install.sh --gui
@@ -33,9 +33,17 @@ sudo -E ./install.sh --static-only
 # Auditoría ADB: claves RSA, depuración, red, puerto 5555, fugas y apps depurables
 ./src/no4nn.sh --audit --dry-run --serial emulator-5554
 ./src/no4nn.sh --audit --serial emulator-5554 --audit-confirm
+
+# Conexión ADB: verificar el estado y forzar la conexión (USB y TCP)
+./src/no4nn.sh --connect --dry-run --serial emulator-5554
+./src/no4nn.sh --connect --serial emulator-5554 --connect-force --connect-confirm
+./src/no4nn.sh --connect --connect-tcp 192.168.1.42 --connect-confirm
+
+# Alcance de laboratorio (allowlist de seriales e IPs TCP)
+./src/no4nn.sh --connect --dry-run --scope-file ~/security-tools/scope
 ```
 
-Las operaciones reales de trazas y auditoría exigen `--confirm` (o confirmar el diálogo en la GUI) y verifican el serial en `adb devices` sin conectar nada automáticamente. La evidencia queda fuera del árbol del proyecto (`~/security-tools/traces/` y `~/security-tools/audits/`), con manifiesto y SHA-256 por archivo.
+Las operaciones reales de trazas y auditoría exigen `--confirm` (o confirmar el diálogo en la GUI) y verifican el serial en `adb devices` sin conectar nada automáticamente. La verificación de conexión es de solo lectura y no exige confirmación; forzar o conectar por TCP sí (ver `docs/conexion-adb.md`). La evidencia queda fuera del árbol del proyecto (`~/security-tools/traces/`, `~/security-tools/audits/` y `~/security-tools/connections/`), con manifiesto y SHA-256 por archivo. El alcance de laboratorio (`~/security-tools/scope`, allowlist de seriales e IPs TCP; ver `docs/alcance-laboratorio.md`) rechaza objetivos fuera de alcance; sin ese archivo, la allowlist está inactiva y el operador responde por cada objetivo. En la GUI, el botón **Detectar** rellena el serial con el dispositivo visible, el botón **Generar** crea una semilla de aleatorización para la auditoría, y cada módulo ADB tiene un botón **Ejecutar módulo en el dispositivo** que corre sus comandos en orden con una sola confirmación.
 
 ## Higiene del repo
 

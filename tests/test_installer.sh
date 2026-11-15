@@ -200,6 +200,94 @@ grep -q 'AuditView' src/no4nn_gui.py
 grep -q 'AUDITORÍA ADB' src/no4nn_gui.py
 grep -q 'docs/auditoria-adb.md' README.md
 
+# Apartado de conexión ADB y alcance de laboratorio.
+bash -n src/android_toolchain/connect.sh
+bash -n src/android_toolchain/scope.sh
+bash src/no4nn.sh --help | grep -q -- '--connect'
+bash src/no4nn.sh --help | grep -q -- '--scope-file'
+bash src/android_toolchain/connect.sh --help | grep -q -- '--tcp'
+bash src/android_toolchain/connect.sh --help | grep -q -- '--force'
+bash src/android_toolchain/connect.sh --help | grep -q -- '--scope-file'
+
+connect_plan="$(bash src/no4nn.sh --connect --dry-run --serial emulator-5554)"
+grep -q 'adb version' <<<"$connect_plan"
+grep -q 'adb devices -l' <<<"$connect_plan"
+grep -q 'get-state' <<<"$connect_plan"
+! grep -q 'kill-server' <<<"$connect_plan"
+grep -q 'kill-server' <<<"$(bash src/no4nn.sh --connect --dry-run --connect-force)"
+grep -q 'adb connect 192.168.1.42:5555' <<<"$(bash src/no4nn.sh --connect --dry-run --connect-tcp 192.168.1.42)"
+
+if bash src/no4nn.sh --connect --dry-run --connect-tcp 999.1.1.1 >/dev/null 2>&1; then
+    echo 'IP TCP no válida no fue rechazada' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --dry-run --connect-timeout 0 >/dev/null 2>&1; then
+    echo 'timeout no válido no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --serial emulator-5554 --connect-force >/dev/null 2>&1; then
+    echo 'forzar conexión sin --confirm no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --traces --dry-run >/dev/null 2>&1; then
+    echo '--connect combinado con --traces no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --audit --dry-run >/dev/null 2>&1; then
+    echo '--connect combinado con --audit no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --static-only --dry-run >/dev/null 2>&1; then
+    echo '--connect combinado con --static-only no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --connect --plan-json --connect-force --connect-timeout 30 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["force"] is True and d["timeout"] == 30 and "adb kill-server" in d["steps"]'; then
+    :
+else
+    echo 'plan JSON de conexión inválido' >&2
+    exit 1
+fi
+
+# Alcance: serial e IP fuera de alcance se rechazan; dentro, pasan.
+scope_dir="$(mktemp -d)"
+printf 'serial:emulator-5554\ntcp:192.168.1.0/24\n' >"$scope_dir/scope"
+if bash src/no4nn.sh --connect --dry-run --serial emulator-9999 --scope-file "$scope_dir/scope" >/dev/null 2>&1; then
+    echo 'serial fuera de alcance no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --connect --dry-run --connect-tcp 10.0.0.5 --scope-file "$scope_dir/scope" >/dev/null 2>&1; then
+    echo 'IP TCP fuera de alcance no fue rechazada' >&2
+    exit 1
+fi
+bash src/no4nn.sh --connect --dry-run --serial emulator-5554 --scope-file "$scope_dir/scope" >/dev/null
+bash src/no4nn.sh --connect --dry-run --connect-tcp 192.168.1.42 --scope-file "$scope_dir/scope" >/dev/null
+if bash src/no4nn.sh --connect --dry-run --scope-file "$scope_dir/noexiste" >/dev/null 2>&1; then
+    echo 'archivo de alcance explícito inexistente no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --traces --dry-run --serial emulator-9999 --scope-file "$scope_dir/scope" >/dev/null 2>&1; then
+    echo 'serial de trazas fuera de alcance no fue rechazado' >&2
+    exit 1
+fi
+rm -rf "$scope_dir"
+
+grep -q 'askyesno' src/ui/connect_view.py
+grep -q 'ConnectView' src/no4nn_gui.py
+grep -q 'CONEXIÓN ADB' src/no4nn_gui.py
+grep -q 'docs/conexion-adb.md' README.md
+grep -q 'docs/alcance-laboratorio.md' README.md
+grep -q 'Detectar' src/ui/adb_view.py
+grep -q 'Ejecutar módulo' src/ui/adb_view.py
+grep -q 'Generar' src/ui/audit_view.py
+grep -q 'device_detect' src/ui/audit_view.py src/ui/traces_view.py src/ui/connect_view.py src/ui/adb_view.py
+grep -q 'wraplength' src/ui/theme.py
+
 # Auditoría real contra un adb falso (sin dispositivo).
 audit_bin="$(mktemp -d)"
 audit_out="$(mktemp -d)"

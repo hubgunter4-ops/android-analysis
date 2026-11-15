@@ -26,6 +26,7 @@ chmod 755 \
     "$STAGE_DIR/usr/share/android-analysis/src/no4nn.sh" \
     "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/traces.sh" \
     "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/audit.sh" \
+    "$STAGE_DIR/usr/share/android-analysis/src/android_toolchain/connect.sh" \
     "$STAGE_DIR/usr/share/android-analysis/src/no4nn_gui.py" \
     "$STAGE_DIR/usr/share/android-analysis/install.sh"
 

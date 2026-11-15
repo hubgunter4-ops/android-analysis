@@ -24,9 +24,14 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=src/android_toolchain/scope.sh
+source "$SCRIPT_DIR/scope.sh"
+
 AUDIT_VERSION="2.1.0"
 OUT_DIR="${OUT_DIR:-$HOME/security-tools/audits}"
 SERIAL=""
+SCOPE_FILE=""
 CHECKS=""
 EXPECTED_KEY=""
 SEED=""
@@ -68,6 +73,8 @@ Uso: audit.sh [opciones]
                          comprueba el estado del puerto dentro del dispositivo.
   --dry-run              Muestra el plan; no llama a adb ni crea directorios.
   --plan-json            Emite el plan como JSON y no ejecuta la auditoría.
+  --scope-file PATH      Archivo de alcance de laboratorio (allowlist).
+                         Default: $HOME/security-tools/scope si existe.
   --confirm              Confirmación explícita para una auditoría real.
                          Sin --dry-run ni --confirm la auditoría se rechaza.
   -h, --help             Muestra esta ayuda.
@@ -611,6 +618,7 @@ audit() {
     {
         printf 'RESUMEN DE AUDITORÍA ADB\n'
         printf 'versión: %s\n' "$AUDIT_VERSION"
+        printf 'alcance: %s\n' "$(scope_status "$SCOPE_FILE")"
         printf 'fecha UTC: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         printf 'serial: %s\n' "${SERIAL:-<único dispositivo>}"
         printf 'semilla de aleatorización: %s\n' "$seed"
@@ -667,6 +675,7 @@ main() {
             --serial) (($# >= 2)) || fail "--serial requiere SERIAL"; SERIAL="$2"; shift 2 ;;
             --out-dir) (($# >= 2)) || fail "--out-dir requiere PATH"; OUT_DIR="$2"; shift 2 ;;
             --checks) (($# >= 2)) || fail "--checks requiere LISTA"; CHECKS="$2"; shift 2 ;;
+            --scope-file) (($# >= 2)) || fail "--scope-file requiere PATH"; SCOPE_FILE="$2"; shift 2 ;;
             --expected-key) (($# >= 2)) || fail "--expected-key requiere PATH"; EXPECTED_KEY="$2"; shift 2 ;;
             --seed) (($# >= 2)) || fail "--seed requiere N"; SEED="$2"; shift 2 ;;
             --sin-sonda-red) NO_NETWORK_PROBE=1; shift ;;
@@ -687,6 +696,12 @@ main() {
         validate_path "$EXPECTED_KEY"
     fi
     validate_serial
+    scope_validate_path "$SCOPE_FILE"
+    if [[ -n "$SCOPE_FILE" && ! -f "$SCOPE_FILE" ]]; then
+        fail "archivo de alcance no encontrado: $SCOPE_FILE"
+    fi
+    SCOPE_FILE="$(scope_file_effective "$SCOPE_FILE")"
+    scope_check_serial "$SCOPE_FILE" "$SERIAL"
     validate_checks
     validate_seed
     validate_path "$OUT_DIR"

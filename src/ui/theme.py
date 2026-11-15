@@ -87,7 +87,7 @@ def make_output(parent: tk.Misc, row: int, title: str, subtitle: str,
     toolbar = ttk.Frame(panel, style="Card.TFrame")
     toolbar.grid(row=1, column=0, sticky="ew", pady=(0, 10))
     toolbar.columnconfigure(0, weight=1)
-    ttk.Label(toolbar, text=subtitle, style="Muted.TLabel").grid(row=0, column=0, sticky="w")
+    ttk.Label(toolbar, text=subtitle, style="Muted.TLabel", wraplength=300).grid(row=0, column=0, sticky="w")
     if on_copy is not None:
         ttk.Button(toolbar, text="Copiar", command=on_copy, style="Secondary.TButton").grid(row=0, column=1, padx=(8, 0))
     if on_clear is not None:

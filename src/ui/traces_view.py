@@ -6,7 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
-from . import theme
+from . import device_detect, theme
 
 # Fuente -> (etiqueta, activada por defecto). `bugreport` apagado por
 # defecto: es pesado y concentra datos sensibles del dispositivo.
@@ -27,7 +27,7 @@ class TracesView(ttk.Frame):
     """Tercera pestaña: captura de trazas ADB a archivos de evidencia."""
 
     def __init__(self, parent: tk.Misc,
-                 on_start: Callable[[list[str], str, tk.Text], None],
+                 on_start: Callable[[list[str], str, tk.Text], bool],
                  on_cancel: Callable[[], None]) -> None:
         super().__init__(parent, style="App.TFrame", padding=(0, 12, 0, 0))
         self.on_start = on_start
@@ -44,8 +44,19 @@ class TracesView(ttk.Frame):
         self.columnconfigure(0, weight=0, minsize=320)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
-        card = ttk.Frame(self, style="Card.TFrame", padding=22)
-        card.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        container = ttk.Frame(self, style="App.TFrame")
+        container.grid(row=0, column=0, sticky="nsew", padx=(0, 16))
+        container.columnconfigure(0, weight=1)
+        container.rowconfigure(0, weight=1)
+        canvas = tk.Canvas(container, bg=theme.BG, highlightthickness=0)
+        scroll = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        card = ttk.Frame(canvas, style="Card.TFrame", padding=22)
+        window = canvas.create_window((0, 0), window=card, anchor="nw")
+        card.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
         card.columnconfigure(0, weight=1)
         ttk.Label(card, text="TRAZAS ADB", style="Section.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Label(card, text="Procesos, fallos y kernel a archivos", style="CardTitle.TLabel").grid(
@@ -55,7 +66,12 @@ class TracesView(ttk.Frame):
         ttk.Label(card, text="1  ·  DISPOSITIVO", style="Section.TLabel").grid(row=3, column=0, sticky="w")
         ttk.Label(card, text="Serial (vacío: exige un único dispositivo)", style="Panel.TLabel").grid(
             row=4, column=0, sticky="w", pady=(6, 4))
-        ttk.Entry(card, textvariable=self.serial, style="Panel.TEntry").grid(row=5, column=0, sticky="ew")
+        serial_row = ttk.Frame(card, style="Card.TFrame")
+        serial_row.grid(row=5, column=0, sticky="ew")
+        serial_row.columnconfigure(0, weight=1)
+        ttk.Entry(serial_row, textvariable=self.serial, style="Panel.TEntry").grid(row=0, column=0, sticky="ew")
+        ttk.Button(serial_row, text="Detectar", command=self.detect_device,
+                   style="Secondary.TButton").grid(row=0, column=1, padx=(8, 0))
         ttk.Label(card, text="2  ·  DIRECTORIO DE EVIDENCIA", style="Section.TLabel").grid(
             row=6, column=0, sticky="w", pady=(16, 8))
         ttk.Entry(card, textvariable=self.out_dir, style="Panel.TEntry").grid(row=7, column=0, sticky="ew")
@@ -91,6 +107,9 @@ class TracesView(ttk.Frame):
             on_clear=self.clear_output, on_copy=self.copy_output,
         )
         self.set_output("$ terminal de trazas esperando una operación…\n\nListo. Revisa el plan dry-run antes de capturar.\n")
+
+    def detect_device(self) -> None:
+        device_detect.detect_and_fill(self, self.serial)
 
     def selected_sources(self) -> list[str]:
         return [key for key, _label, _default in SOURCES if self.source_vars[key].get()]

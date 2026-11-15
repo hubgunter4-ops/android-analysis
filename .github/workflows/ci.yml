@@ -39,8 +39,8 @@ jobs:
       - name: Validate Python and shell syntax
         run: |
           python -m py_compile src/no4nn_gui.py src/ui/*.py
-          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh
-          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh
+          bash -n install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh
+          shellcheck -x install.sh src/no4nn.sh src/android_toolchain/core.sh src/android_toolchain/traces.sh src/android_toolchain/audit.sh src/android_toolchain/connect.sh src/android_toolchain/scope.sh
 
       - name: Run regression tests
         run: bash tests/test_installer.sh
@@ -55,12 +55,16 @@ jobs:
           app = ToolchainGUI(Path.cwd())
           app.update_idletasks()
           app.update()
-          assert app.notebook.index("end") == 4
+          assert app.notebook.index("end") == 5
           assert "TRAZAS" in app.notebook.tab(2, "text")
           assert "AUDITOR" in app.notebook.tab(3, "text")
+          assert "CONEXI" in app.notebook.tab(4, "text")
           assert len(app.traces_view.selected_sources()) == 8
           assert "bugreport" not in app.traces_view.selected_sources()
           assert len(app.audit_view.selected_checks()) == 6
+          app.audit_view.generate_seed()
+          assert app.audit_view.seed.get().isdigit()
+          assert app.adb_view._module_queue == []
           app.show_diagnostics()
           app.update()
           assert "Diagnóstico" in app.status.get()
@@ -79,6 +83,8 @@ jobs:
           wait_text(app.traces_view.output, "PLAN DE TRAZAS")
           app.audit_view.run_preview()
           wait_text(app.audit_view.output, "PLAN DE AUDITOR")
+          app.connect_view.run_preview()
+          wait_text(app.connect_view.output, "PLAN DE CONEXIÓN ADB")
           app.installer_view.run_plan()
           wait_text(app.installer_view.output, '"phases"')
           app.destroy()
@@ -129,10 +135,16 @@ jobs:
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/diagnostics.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/traces_view.py'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/audit_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/connect_view.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/ui/device_detect.py'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q -- '-rwxr-xr-x.*src/android_toolchain/connect.sh'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/scope.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/traces.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/src/android_toolchain/audit.sh'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/trazas-adb.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/auditoria-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/conexion-adb.md'
+          dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/docs/alcance-laboratorio.md'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/copyright'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/doc/android-analysis-toolchain/changelog.Debian.gz'
           dpkg-deb --contents android-analysis-toolchain_2.1.0_all.deb | grep -q 'usr/share/android-analysis/requirements.lock'

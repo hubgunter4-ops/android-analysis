@@ -11,7 +11,7 @@ from .diagnostics import Diagnostic
 
 
 class InstallerView(ttk.Frame):
-    def __init__(self, parent: tk.Misc, on_start: Callable[[list[str], str, tk.Text], None],
+    def __init__(self, parent: tk.Misc, on_start: Callable[[list[str], str, tk.Text], bool],
                  on_cancel: Callable[[], None], on_diagnostics: Callable[[], None]) -> None:
         super().__init__(parent, style="App.TFrame", padding=(0, 12, 0, 0))
         self.on_start = on_start

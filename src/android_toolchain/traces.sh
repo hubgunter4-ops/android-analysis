@@ -14,9 +14,14 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=src/android_toolchain/scope.sh
+source "$SCRIPT_DIR/scope.sh"
+
 TRACES_VERSION="2.1.0"
 OUT_DIR="${OUT_DIR:-$HOME/security-tools/traces}"
 SERIAL=""
+SCOPE_FILE=""
 SOURCES=""
 INCLUDE_BUGREPORT=0
 DRY_RUN=0
@@ -49,6 +54,8 @@ Uso: traces.sh [opciones]
   --include-bugreport    Añade `adb bugreport` (pesado y sensible; apagado por defecto).
   --dry-run              Muestra el plan; no llama a adb ni crea directorios.
   --plan-json            Emite el plan como JSON y no ejecuta la captura.
+  --scope-file PATH      Archivo de alcance de laboratorio (allowlist).
+                         Default: $HOME/security-tools/scope si existe.
   --confirm              Confirmación explícita para una captura real.
                          Sin --dry-run ni --confirm la captura se rechaza.
   -h, --help             Muestra esta ayuda.
@@ -282,6 +289,7 @@ capture() {
     {
         printf 'MANIFIESTO DE TRAZAS ADB\n'
         printf 'versión: %s\n' "$TRACES_VERSION"
+        printf 'alcance: %s\n' "$(scope_status "$SCOPE_FILE")"
         printf 'fecha UTC: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
         printf 'serial: %s\n' "${SERIAL:-<único dispositivo>}"
         printf 'directorio: %s\n' "$run_dir"
@@ -314,6 +322,7 @@ main() {
             --serial) (($# >= 2)) || fail "--serial requiere SERIAL"; SERIAL="$2"; shift 2 ;;
             --out-dir) (($# >= 2)) || fail "--out-dir requiere PATH"; OUT_DIR="$2"; shift 2 ;;
             --sources) (($# >= 2)) || fail "--sources requiere LISTA"; SOURCES="$2"; shift 2 ;;
+            --scope-file) (($# >= 2)) || fail "--scope-file requiere PATH"; SCOPE_FILE="$2"; shift 2 ;;
             --include-bugreport) INCLUDE_BUGREPORT=1; shift ;;
             --dry-run) DRY_RUN=1; shift ;;
             --plan-json) PLAN_JSON=1; shift ;;
@@ -330,6 +339,12 @@ main() {
         SOURCES="$SOURCES,bugreport"
     fi
     validate_serial
+    scope_validate_path "$SCOPE_FILE"
+    if [[ -n "$SCOPE_FILE" && ! -f "$SCOPE_FILE" ]]; then
+        fail "archivo de alcance no encontrado: $SCOPE_FILE"
+    fi
+    SCOPE_FILE="$(scope_file_effective "$SCOPE_FILE")"
+    scope_check_serial "$SCOPE_FILE" "$SERIAL"
     validate_path "$OUT_DIR"
     if [[ "$OUT_DIR" != /* ]]; then OUT_DIR="$PWD/$OUT_DIR"; fi
     OUT_DIR="$(realpath -m -- "$OUT_DIR")"

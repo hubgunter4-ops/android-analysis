@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from tkinter import messagebox, scrolledtext, ttk
 
-from . import theme
+from . import device_detect, theme
 
 
 READ_ONLY = {
@@ -26,13 +26,17 @@ READ_ONLY = {
 
 class ADBView(ttk.Frame):
     def __init__(self, parent: tk.Misc, catalog_path: Path,
-                 on_command: Callable[[list[str], str, tk.Text], None]) -> None:
+                 on_command: Callable[[list[str], str, tk.Text], bool],
+                 set_done_hook: Callable[[Callable[[], None] | None], None] | None = None) -> None:
         super().__init__(parent, style="App.TFrame", padding=(0, 12, 0, 0))
         self.catalog_path = catalog_path
         self.on_command = on_command
+        self.set_done_hook = set_done_hook
         self.serial = tk.StringVar()
         self.adb_args = tk.StringVar()
         self.module_states: dict[str, bool] = {}
+        self._module_queue: list[list[str]] = []
+        self._module_name = ""
         self._build()
 
     def _build(self) -> None:
@@ -42,13 +46,16 @@ class ADBView(ttk.Frame):
         header = ttk.Frame(self, style="Card.TFrame", padding=16)
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         header.columnconfigure(2, weight=1)
+        header.columnconfigure(5, weight=1)
         ttk.Label(header, text="ADB CONTROL", style="Section.TLabel").grid(row=0, column=0, padx=(0, 18))
         ttk.Label(header, text="Serial opcional", style="Panel.TLabel").grid(row=0, column=1, sticky="e", padx=(0, 8))
         ttk.Entry(header, textvariable=self.serial, width=22, style="Panel.TEntry").grid(row=0, column=2, sticky="ew")
-        ttk.Label(header, text="Argumentos adicionales", style="Panel.TLabel").grid(row=0, column=3, padx=(20, 8))
-        ttk.Entry(header, textvariable=self.adb_args, width=30, style="Panel.TEntry").grid(row=0, column=4, sticky="ew")
-        ttk.Label(header, text="Se interpretan como argumentos, no como shell.", style="Muted.TLabel").grid(
-            row=1, column=0, columnspan=5, sticky="w", pady=(8, 0))
+        ttk.Button(header, text="Detectar", command=self.detect_device,
+                   style="Secondary.TButton").grid(row=0, column=3, padx=(8, 0))
+        ttk.Label(header, text="Argumentos adicionales", style="Panel.TLabel").grid(row=0, column=4, padx=(20, 8))
+        ttk.Entry(header, textvariable=self.adb_args, width=30, style="Panel.TEntry").grid(row=0, column=5, sticky="ew")
+        ttk.Label(header, text="Se interpretan como argumentos, no como shell. «Detectar» rellena el serial con el dispositivo visible.",
+                  style="Muted.TLabel").grid(row=1, column=0, columnspan=6, sticky="w", pady=(8, 0))
 
         modules = ttk.Frame(self, style="Card.TFrame", padding=12)
         modules.grid(row=1, column=0, sticky="nsew", padx=(0, 10))
@@ -100,6 +107,8 @@ class ADBView(ttk.Frame):
             button = ttk.Button(container, text=self._module_title(module, True), style="Module.TButton",
                                 command=lambda m=module, b=body: self._toggle_module(m, b))
             button.pack(fill="x")
+            ttk.Button(body, text="  ▶  Ejecutar módulo en el dispositivo", style="Action.TButton",
+                       command=lambda mod=module, cmds=commands: self.run_module(mod, cmds)).pack(fill="x", pady=(2, 6))
             for command in commands:
                 ttk.Button(body, text=f"  ▶  adb {command}", style="Action.TButton",
                            command=lambda cmd=command, mod=module: self.run_adb(mod, cmd)).pack(fill="x", pady=1)
@@ -134,6 +143,59 @@ class ADBView(ttk.Frame):
         argv.extend(prefixes.get(module, [])); argv.extend(shlex.split(command))
         if self.adb_args.get().strip(): argv.extend(shlex.split(self.adb_args.get().strip()))
         return argv
+
+    def detect_device(self) -> None:
+        device_detect.detect_and_fill(self, self.serial)
+
+    def run_module(self, module: str, commands: list[str]) -> None:
+        """Ejecuta todos los comandos del módulo, en orden, sobre el dispositivo.
+
+        Cada comando corre como su propio proceso (misma salida y mismo
+        registro que al pulsarlo a mano); al terminar uno, el hook de fin
+        de proceso lanza el siguiente. Una sola confirmación cubre el
+        módulo completo y lista cada comando.
+        """
+        if self._module_queue:
+            messagebox.showinfo("Módulo en curso", "Ya hay un módulo ejecutándose. Espera a que termine.")
+            return
+        argv_list = [self._argv(module, command) for command in commands]
+        detail = "\n".join(" ".join(shlex.quote(part) for part in argv) for argv in argv_list)
+        if not messagebox.askyesno(
+                "Ejecutar módulo en el dispositivo",
+                f"Módulo: {module}\nSerial: {self.serial.get().strip() or 'único dispositivo'}\n\n"
+                f"Se ejecutan en orden:\n{detail}\n\n"
+                "Algunos comandos pueden modificar el dispositivo o revelar datos "
+                "sensibles. Úsalo únicamente sobre un dispositivo autorizado.",
+                icon="warning"):
+            return
+        self._module_queue = list(argv_list)
+        self._module_name = module
+        self._run_next_module_command()
+
+    def _run_next_module_command(self) -> None:
+        if not self._module_queue:
+            self._module_name = ""
+            if self.set_done_hook is not None:
+                self.set_done_hook(None)
+            return
+        argv = self._module_queue.pop(0)
+        item = self.request_log.insert("", "end", values=(
+            self._module_name, " ".join(argv[1:]), "EN CURSO"))
+        self.request_log.see(item)
+        if self.set_done_hook is not None:
+            self.set_done_hook(self._run_next_module_command)
+        started = self.on_command(argv, f"ejecutando módulo {self._module_name}", self.output)
+        if not started:
+            # El proceso no arrancó (otro en curso): no queda hook colgado.
+            self._module_queue = []
+            self._module_name = ""
+            if self.set_done_hook is not None:
+                self.set_done_hook(None)
+
+    def cancel_module_run(self) -> None:
+        """Limpia la cola de un módulo al cancelar el proceso en curso."""
+        self._module_queue = []
+        self._module_name = ""
 
     def run_adb(self, module: str, command: str) -> None:
         argv = self._argv(module, command)

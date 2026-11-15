@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import os
+import random
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import messagebox, ttk
 
-from . import theme
+from . import device_detect, theme
 
 # Comprobación -> (etiqueta, activada por defecto).
 CHECKS: tuple[tuple[str, str, bool], ...] = (
@@ -23,7 +24,7 @@ class AuditView(ttk.Frame):
     """Cuarta pestaña: auditoría ADB antes de cualquier conexión."""
 
     def __init__(self, parent: tk.Misc,
-                 on_start: Callable[[list[str], str, tk.Text], None],
+                 on_start: Callable[[list[str], str, tk.Text], bool],
                  on_cancel: Callable[[], None]) -> None:
         super().__init__(parent, style="App.TFrame", padding=(0, 12, 0, 0))
         self.on_start = on_start
@@ -68,7 +69,12 @@ class AuditView(ttk.Frame):
         ttk.Label(card, text="1  ·  DISPOSITIVO", style="Section.TLabel").grid(row=3, column=0, sticky="w")
         ttk.Label(card, text="Serial (vacío: exige un único dispositivo)", style="Panel.TLabel").grid(
             row=4, column=0, sticky="w", pady=(6, 4))
-        ttk.Entry(card, textvariable=self.serial, style="Panel.TEntry").grid(row=5, column=0, sticky="ew")
+        serial_row = ttk.Frame(card, style="Card.TFrame")
+        serial_row.grid(row=5, column=0, sticky="ew")
+        serial_row.columnconfigure(0, weight=1)
+        ttk.Entry(serial_row, textvariable=self.serial, style="Panel.TEntry").grid(row=0, column=0, sticky="ew")
+        ttk.Button(serial_row, text="Detectar", command=self.detect_device,
+                   style="Secondary.TButton").grid(row=0, column=1, padx=(8, 0))
         ttk.Label(card, text="2  ·  DIRECTORIO DE EVIDENCIA", style="Section.TLabel").grid(
             row=6, column=0, sticky="w", pady=(10, 6))
         ttk.Entry(card, textvariable=self.out_dir, style="Panel.TEntry").grid(row=7, column=0, sticky="ew")
@@ -88,7 +94,12 @@ class AuditView(ttk.Frame):
         ttk.Label(card, text="Semilla de aleatorización (vacío: aleatoria por ejecución)",
                   style="Panel.TLabel").grid(row=row, column=0, sticky="w", pady=(6, 2))
         row += 1
-        ttk.Entry(card, textvariable=self.seed, style="Panel.TEntry").grid(row=row, column=0, sticky="ew")
+        seed_row = ttk.Frame(card, style="Card.TFrame")
+        seed_row.grid(row=row, column=0, sticky="ew")
+        seed_row.columnconfigure(0, weight=1)
+        ttk.Entry(seed_row, textvariable=self.seed, style="Panel.TEntry").grid(row=0, column=0, sticky="ew")
+        ttk.Button(seed_row, text="Generar", command=self.generate_seed,
+                   style="Secondary.TButton").grid(row=0, column=1, padx=(8, 0))
         row += 1
         ttk.Checkbutton(card, text="Omitir la sonda de red al 5555 (solo estado interno)",
                         variable=self.no_network_probe,
@@ -118,6 +129,13 @@ class AuditView(ttk.Frame):
             on_clear=self.clear_output, on_copy=self.copy_output,
         )
         self.set_output("$ terminal de auditoría esperando una operación…\n\nListo. Revisa el plan dry-run antes de auditar.\n")
+
+    def detect_device(self) -> None:
+        device_detect.detect_and_fill(self, self.serial)
+
+    def generate_seed(self) -> None:
+        # Semilla aleatoria de 31 bits, como la que usa audit.sh por defecto.
+        self.seed.set(str(random.randint(0, 2 ** 31 - 1)))
 
     def selected_checks(self) -> list[str]:
         return [key for key, _label, _default in CHECKS if self.check_vars[key].get()]

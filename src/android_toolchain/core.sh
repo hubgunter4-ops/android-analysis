@@ -33,6 +33,14 @@ AUDIT_EXPECTED_KEY=""
 AUDIT_SEED=""
 AUDIT_NO_NETWORK_PROBE=0
 AUDIT_CONFIRM=0
+CONNECT_ONLY=0
+CONNECT_SERIAL=""
+CONNECT_DIR=""
+CONNECT_TCP=""
+CONNECT_FORCE=0
+CONNECT_TIMEOUT=""
+CONNECT_CONFIRM=0
+SCOPE_FILE=""
 BANNER_STYLE="${BANNER_STYLE:-$((RANDOM % 3))}"
 
 banner() {
@@ -102,6 +110,18 @@ Auditoría ADB (no instala nada; claves RSA, depuración, red y puerto 5555):
   --audit-sin-sonda-red  Omite la sonda TCP desde la red al puerto 5555.
   --audit-confirm        Confirmación explícita para una auditoría real.
                          Sin --dry-run ni --audit-confirm la auditoría se rechaza.
+
+  --connect              Solo conexión; no ejecuta las fases de instalación.
+  --connect-serial SERIAL Serial del dispositivo (alias: --serial).
+  --connect-dir PATH     Directorio base de evidencia (default: $HOME/security-tools/connections).
+  --connect-tcp IP[:PUERTO] Conectar por TCP a una IP explícita (puerto default 5555).
+  --connect-force        Forzar la conexión: reinicia el servidor, reconecta y espera.
+  --connect-timeout N    Espera máxima de `adb wait-for-device` en segundos (default: 15).
+  --scope-file PATH      Archivo de alcance de laboratorio (allowlist) para
+                         trazas, auditoría y conexión (default: $HOME/security-tools/scope si existe).
+  --connect-confirm      Confirmación explícita para forzar o conectar por TCP.
+                         Sin --dry-run ni --connect-confirm esas acciones se rechazan.
+                         La verificación sola no exige confirmación.
 
 Variables:
   JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
@@ -331,6 +351,7 @@ run_traces() {
     [[ -n "$TRACES_SERIAL" ]] && args+=(--serial "$TRACES_SERIAL")
     [[ -n "$TRACES_DIR" ]] && args+=(--out-dir "$TRACES_DIR")
     [[ -n "$TRACES_SOURCES" ]] && args+=(--sources "$TRACES_SOURCES")
+    [[ -n "$SCOPE_FILE" ]] && args+=(--scope-file "$SCOPE_FILE")
     (( DRY_RUN )) && args+=(--dry-run)
     (( PLAN_JSON )) && args+=(--plan-json)
     (( TRACES_CONFIRM )) && args+=(--confirm)
@@ -345,9 +366,24 @@ run_audit() {
     [[ -n "$AUDIT_EXPECTED_KEY" ]] && args+=(--expected-key "$AUDIT_EXPECTED_KEY")
     [[ -n "$AUDIT_SEED" ]] && args+=(--seed "$AUDIT_SEED")
     (( AUDIT_NO_NETWORK_PROBE )) && args+=(--sin-sonda-red)
+    [[ -n "$SCOPE_FILE" ]] && args+=(--scope-file "$SCOPE_FILE")
     (( DRY_RUN )) && args+=(--dry-run)
     (( PLAN_JSON )) && args+=(--plan-json)
     (( AUDIT_CONFIRM )) && args+=(--confirm)
+    "${args[@]}"
+}
+
+run_connect() {
+    local -a args=(bash "$ROOT_DIR/src/android_toolchain/connect.sh")
+    [[ -n "$CONNECT_SERIAL" ]] && args+=(--serial "$CONNECT_SERIAL")
+    [[ -n "$CONNECT_DIR" ]] && args+=(--out-dir "$CONNECT_DIR")
+    [[ -n "$CONNECT_TCP" ]] && args+=(--tcp "$CONNECT_TCP")
+    (( CONNECT_FORCE )) && args+=(--force)
+    [[ -n "$CONNECT_TIMEOUT" ]] && args+=(--timeout "$CONNECT_TIMEOUT")
+    [[ -n "$SCOPE_FILE" ]] && args+=(--scope-file "$SCOPE_FILE")
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    (( CONNECT_CONFIRM )) && args+=(--confirm)
     "${args[@]}"
 }
 
@@ -364,7 +400,7 @@ android_toolchain_main() {
             --interactive) INTERACTIVE=1; shift ;;
             --guided) GUIDED=1; shift ;;
             --traces) TRACES_ONLY=1; shift ;;
-            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; shift 2 ;;
+            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; CONNECT_SERIAL="$2"; shift 2 ;;
             --traces-dir) (($# >= 2)) || fail "--traces-dir requiere PATH"; TRACES_DIR="$2"; shift 2 ;;
             --traces-sources) (($# >= 2)) || fail "--traces-sources requiere LISTA"; TRACES_SOURCES="$2"; shift 2 ;;
             --traces-confirm) TRACES_CONFIRM=1; shift ;;
@@ -376,6 +412,14 @@ android_toolchain_main() {
             --audit-seed) (($# >= 2)) || fail "--audit-seed requiere N"; AUDIT_SEED="$2"; shift 2 ;;
             --audit-sin-sonda-red) AUDIT_NO_NETWORK_PROBE=1; shift ;;
             --audit-confirm) AUDIT_CONFIRM=1; shift ;;
+            --connect) CONNECT_ONLY=1; shift ;;
+            --connect-serial) (($# >= 2)) || fail "--connect-serial requiere SERIAL"; CONNECT_SERIAL="$2"; shift 2 ;;
+            --connect-dir) (($# >= 2)) || fail "--connect-dir requiere PATH"; CONNECT_DIR="$2"; shift 2 ;;
+            --connect-tcp) (($# >= 2)) || fail "--connect-tcp requiere IP[:PUERTO]"; CONNECT_TCP="$2"; shift 2 ;;
+            --connect-force) CONNECT_FORCE=1; shift ;;
+            --connect-timeout) (($# >= 2)) || fail "--connect-timeout requiere N"; CONNECT_TIMEOUT="$2"; shift 2 ;;
+            --connect-confirm) CONNECT_CONFIRM=1; shift ;;
+            --scope-file) (($# >= 2)) || fail "--scope-file requiere PATH"; SCOPE_FILE="$2"; shift 2 ;;
             -h|--help) usage; return 0 ;;
             *) fail "opción desconocida: $1" ;;
         esac
@@ -383,6 +427,8 @@ android_toolchain_main() {
 
     (( STATIC_ONLY && DYNAMIC_ONLY )) && fail "--static-only y --dynamic-only son excluyentes"
     (( TRACES_ONLY && AUDIT_ONLY )) && fail "--traces y --audit son excluyentes"
+    (( TRACES_ONLY && CONNECT_ONLY )) && fail "--traces y --connect son excluyentes"
+    (( AUDIT_ONLY && CONNECT_ONLY )) && fail "--audit y --connect son excluyentes"
     if (( TRACES_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--traces no se combina con --static-only ni --dynamic-only"
         run_traces
@@ -391,6 +437,11 @@ android_toolchain_main() {
     if (( AUDIT_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--audit no se combina con --static-only ni --dynamic-only"
         run_audit
+        return $?
+    fi
+    if (( CONNECT_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--connect no se combina con --static-only ni --dynamic-only"
+        run_connect
         return $?
     fi
     validate_style
