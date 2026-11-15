@@ -7,13 +7,17 @@ cd "$ROOT"
 bash -n src/no4nn.sh
 bash -n src/android_toolchain/core.sh
 bash -n src/android_toolchain/traces.sh
+bash -n src/android_toolchain/audit.sh
 python3 -m py_compile src/no4nn_gui.py src/ui/*.py
 bash src/no4nn.sh --help | grep -q -- '--dry-run'
 bash src/no4nn.sh --help | grep -q -- '--static-only'
 bash src/no4nn.sh --help | grep -q -- '--plan-json'
 bash src/no4nn.sh --help | grep -q -- '--gui'
 bash src/no4nn.sh --help | grep -q -- '--traces'
+bash src/no4nn.sh --help | grep -q -- '--audit'
 bash src/android_toolchain/traces.sh --help | grep -q -- '--confirm'
+bash src/android_toolchain/audit.sh --help | grep -q -- '--confirm'
+bash src/android_toolchain/audit.sh --help | grep -q -- '--seed'
 
 for style in 0 1 2; do
     output="$(bash src/no4nn.sh --dry-run --static-only --tools-dir "/tmp/tool09-$style" --banner-style "$style")"
@@ -135,6 +139,129 @@ grep -q 'askyesno' src/ui/traces_view.py
 grep -q 'TracesView' src/no4nn_gui.py
 grep -q 'TRAZAS ADB' src/no4nn_gui.py
 grep -q 'docs/trazas-adb.md' README.md
+
+# Apartado de auditoría ADB: plan, validación y auditoría con adb falso.
+audit_plan="$(bash src/no4nn.sh --audit --dry-run --serial emulator-5554 --audit-seed 42)"
+grep -q 'adb_keys' <<<"$audit_plan"
+grep -q 'getprop' <<<"$audit_plan"
+grep -q '5555' <<<"$audit_plan"
+grep -q 'logcat' <<<"$audit_plan"
+grep -q 'dumpsys package' <<<"$audit_plan"
+grep -q 'semilla: 42' <<<"$audit_plan"
+# La misma semilla da el mismo orden (aleatorización reproducible).
+[[ "$(bash src/no4nn.sh --audit --dry-run --serial emulator-5554 --audit-seed 42 | grep -E '^\+' | md5sum)" \
+   == "$(bash src/no4nn.sh --audit --dry-run --serial emulator-5554 --audit-seed 42 | grep -E '^\+' | md5sum)" ]]
+grep -q 'sin-sonda-red' <<<"$(bash src/no4nn.sh --audit --dry-run --audit-sin-sonda-red)"
+
+if bash src/no4nn.sh --audit --dry-run --audit-checks foo >/dev/null 2>&1; then
+    echo 'comprobación de auditoría desconocida no fue rechazada' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --dry-run --audit-serial 'bad;rm' >/dev/null 2>&1; then
+    echo 'serial de auditoría no válido no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --dry-run --audit-dir ../escape >/dev/null 2>&1; then
+    echo 'directorio de auditoría con traversal no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --dry-run --audit-seed abc >/dev/null 2>&1; then
+    echo 'semilla no entera no fue rechazada' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --serial emulator-5554 >/dev/null 2>&1; then
+    echo 'auditoría sin --confirm no fue rechazada' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --traces --dry-run >/dev/null 2>&1; then
+    echo '--audit combinado con --traces no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --static-only --dry-run >/dev/null 2>&1; then
+    echo '--audit combinado con --static-only no fue rechazado' >&2
+    exit 1
+fi
+
+if bash src/no4nn.sh --audit --plan-json --audit-checks claves-rsa,puerto-5555 --audit-seed 7 | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["checks"] == ["puerto-5555", "claves-rsa"] and d["seed"] == "7" and d["network_probe"] is True and len(d["files"]) == 2'; then
+    :
+else
+    echo 'plan JSON de auditoría inválido' >&2
+    exit 1
+fi
+
+grep -q 'askyesno' src/ui/audit_view.py
+grep -q 'AuditView' src/no4nn_gui.py
+grep -q 'AUDITORÍA ADB' src/no4nn_gui.py
+grep -q 'docs/auditoria-adb.md' README.md
+
+# Auditoría real contra un adb falso (sin dispositivo).
+audit_bin="$(mktemp -d)"
+audit_out="$(mktemp -d)"
+audit_home="$(mktemp -d)"
+mkdir -p "$audit_home/.android"
+printf '%s\n' 'AAAAB3operatorbase64key== operador@lab' >"$audit_home/.android/adbkey.pub"
+cat >"$audit_bin/adb" <<'FAKEADB'
+#!/usr/bin/env bash
+args=("$@")
+if [[ "${args[0]:-}" == "-s" ]]; then args=("${args[@]:2}"); fi
+case "${args[*]}" in
+  "devices") printf 'List of devices attached\nemulator-5554\tdevice\n' ;;
+  "shell cat /data/misc/adb/adb_keys") printf 'AAAAB3operatorbase64key== operador@lab\nAAAAB3unknownbase64key== intruso@desconocido\n' ;;
+  "shell getprop ro.debuggable") printf '0\n' ;;
+  "shell getprop ro.secure") printf '1\n' ;;
+  "shell getprop ro.adb.secure") printf '1\n' ;;
+  "shell getprop service.adb.tcp.port") printf '\n' ;;
+  "shell getprop persist.adb.tcp.port") printf '\n' ;;
+  "shell getprop sys.usb.config") printf 'adb\n' ;;
+  "shell getprop persist.sys.usb.config") printf 'adb\n' ;;
+  "shell getprop ro.build.type") printf 'user\n' ;;
+  "shell getprop ro.build.tags") printf 'release-keys\n' ;;
+  "shell getprop ro.product.model") printf 'Redmi Note 13 Pro\n' ;;
+  "shell getprop ro.build.version.release") printf '16\n' ;;
+  "shell ip addr show") printf '2: wlan0: <BROADCAST,MULTICAST,UP> mtu 1500\n    inet 192.168.1.42/24 brd 192.168.1.255 scope global wlan0\n' ;;
+  "shell ip route") printf 'default via 192.168.1.1 dev wlan0\n' ;;
+  "shell ss -tlnp") printf 'State Recv-Q Send-Q Local Address:Port\nLISTEN 0 4096 0.0.0.0:5555 0.0.0.0:*\n' ;;
+  "shell cat /proc/net/tcp") printf '  sl  local_address rem_address   st\n   0: 00000000:15B3 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 123 1 0000000000000000 100 0 0 10 0\n' ;;
+  "shell cat /proc/net/tcp6") printf '  sl  local_address rem_address   st\n' ;;
+  "shell ip -o -4 addr show") printf '2: wlan0    inet 192.168.1.42/24 brd 192.168.1.255 scope global wlan0\n' ;;
+  "logcat -d -v threadtime -b main -b system -b events -b crash") printf '01-01 00:00:01.000  1000  1000 I TestTag: Authorization: Bearer abc123faketoken\n01-01 00:00:02.000  1000  1000 D OtherTag: usuario contacto@example.com inicio sesion\n01-01 00:00:03.000  1000  1000 I TestTag: operacion normal sin secretos\n' ;;
+  "shell pm list packages -3") printf 'package:com.example.app1\npackage:com.example.app2\npackage:com.example.app3\n' ;;
+  "shell dumpsys package") printf 'Package [com.example.app1] (1234567):\n  codePath=/data/app/com.example.app1-1/base.apk\n  flags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]\nPackage [com.example.app2] (1234568):\n  codePath=/data/app/com.example.app2-1/base.apk\n  flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]\nPackage [com.android.systemui] (1234569):\n  codePath=/system/priv-app/SystemUI/SystemUI.apk\n  flags=[ SYSTEM HAS_CODE ]\n' ;;
+  *) echo "fake adb: comando no esperado: ${args[*]}" >&2; exit 3 ;;
+esac
+FAKEADB
+chmod +x "$audit_bin/adb"
+HOME="$audit_home" PATH="$audit_bin:$PATH" bash src/android_toolchain/audit.sh --serial emulator-5554 --confirm --seed 42 --sin-sonda-red --out-dir "$audit_out" >"$audit_out.log" 2>&1
+audit_dir="$(find "$audit_out" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+test -n "$audit_dir"
+for f in 01-claves-rsa-autorizadas.txt 02-propiedades-depuracion.txt 03-exposicion-red.txt 04-puerto-5555.txt 05-fuga-datos-sensibles.txt 06-apps-terceros-depurables.txt RESUMEN.txt MANIFIESTO.txt; do test -s "$audit_dir/$f"; done
+grep -q 'DESCONOCIDA' "$audit_dir/01-claves-rsa-autorizadas.txt"
+grep -q 'total de claves autorizadas: 2' "$audit_dir/01-claves-rsa-autorizadas.txt"
+grep -q 'ro.debuggable=0' "$audit_dir/02-propiedades-depuracion.txt"
+grep -q '192.168.1.42' "$audit_dir/03-exposicion-red.txt"
+grep -q '00000000:15B3' "$audit_dir/04-puerto-5555.txt"
+grep -q 'sonda de red omitida' "$audit_dir/04-puerto-5555.txt"
+grep -q 'credenciales.*2 coincidencia' "$audit_dir/05-fuga-datos-sensibles.txt"
+! grep -q 'abc123faketoken' "$audit_dir/05-fuga-datos-sensibles.txt"
+! grep -q 'contacto@example.com' "$audit_dir/05-fuga-datos-sensibles.txt"
+grep -q 'valor redactado' "$audit_dir/05-fuga-datos-sensibles.txt"
+grep -q 'com.example.app1' "$audit_dir/06-apps-terceros-depurables.txt"
+grep -q 'total de apps de terceros: 3' "$audit_dir/06-apps-terceros-depurables.txt"
+grep -Eq '^claves-rsa +CRÍTICO' "$audit_dir/RESUMEN.txt"
+grep -Eq '^propiedades-depuracion +OK' "$audit_dir/RESUMEN.txt"
+grep -Eq '^exposicion-red +ADVERTENCIA' "$audit_dir/RESUMEN.txt"
+grep -Eq '^puerto-5555 +CRÍTICO' "$audit_dir/RESUMEN.txt"
+grep -Eq '^fuga-datos +CRÍTICO' "$audit_dir/RESUMEN.txt"
+grep -Eq '^apps-terceros +CRÍTICO' "$audit_dir/RESUMEN.txt"
+grep -q 'semilla de aleatorización: 42' "$audit_dir/RESUMEN.txt"
+test "$(stat -c %a "$audit_dir")" = 700
+rm -rf "$audit_bin" "$audit_out" "$audit_home" "$audit_out.log"
 
 # Captura real contra un adb falso (sin dispositivo).
 fake_bin="$(mktemp -d)"

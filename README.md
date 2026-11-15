@@ -1,6 +1,41 @@
 # ANDROID ANALYSIS — Reversing & Instrumentation Toolchain
 
+[![CI](https://github.com/hubgunter4-ops/android-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/hubgunter4-ops/android-analysis/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](android-analysis-toolchain_2.1.0_all.deb)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](requirements.lock)
+
+![Panel Tkinter de Android Analysis](docs/panel-tkinter.png)
+
+*Panel Tkinter con sus cuatro pestañas: Instalador, Módulos ADB, Trazas ADB y Auditoría ADB.*
+
 ![Flujo de transición y operación](assets/operation-flow.png)
+
+## Uso
+
+Panel gráfico (cuatro pestañas: Instalador, Módulos ADB, Trazas ADB y Auditoría ADB):
+
+```bash
+./install.sh --gui
+```
+
+Línea de comandos: revisa siempre el plan con `--dry-run` antes de una operación real.
+
+```bash
+# Instalar el toolchain (plan primero, luego real)
+./install.sh --dry-run --static-only --plan-json
+sudo -E ./install.sh --static-only
+
+# Trazas ADB: procesos, fallos/errores y kernel a archivos de evidencia
+./src/no4nn.sh --traces --dry-run --serial emulator-5554
+./src/no4nn.sh --traces --serial emulator-5554 --traces-confirm
+
+# Auditoría ADB: claves RSA, depuración, red, puerto 5555, fugas y apps depurables
+./src/no4nn.sh --audit --dry-run --serial emulator-5554
+./src/no4nn.sh --audit --serial emulator-5554 --audit-confirm
+```
+
+Las operaciones reales de trazas y auditoría exigen `--confirm` (o confirmar el diálogo en la GUI) y verifican el serial en `adb devices` sin conectar nada automáticamente. La evidencia queda fuera del árbol del proyecto (`~/security-tools/traces/` y `~/security-tools/audits/`), con manifiesto y SHA-256 por archivo.
 
 ## Higiene del repo
 
@@ -59,6 +94,10 @@ El CLI soporta `--dry-run`, `--plan-json`, `--static-only`, `--dynamic-only`, `-
 ### Trazas ADB
 
 La pestaña **TRAZAS ADB** de la GUI (o `./src/no4nn.sh --traces`) captura procesos, fallos/errores y el registro del kernel de un dispositivo de laboratorio autorizado, cada fuente en su propio archivo bajo `~/security-tools/traces/<fecha>_<serial>/`, con `MANIFIESTO.txt` (comando, código, bytes y SHA-256 por fuente). Incluye `ps -A`, `top`, logcat de errores y de crashes, logcat del sistema, `dmesg`, el kernel anterior vía `pstore` (con fallback legacy a `/proc/last_kmsg`), `dumpsys dropbox` (fallos y ANR) y, solo si se pide, `bugreport`. Revisa siempre el plan con `--dry-run` primero; la captura real exige `--confirm` (o confirmar el diálogo en la GUI) y verifica el serial en `adb devices` sin conectar nada automáticamente. Consulta [docs/trazas-adb.md](docs/trazas-adb.md).
+
+### Auditoría ADB
+
+La pestaña **AUDITORÍA ADB** de la GUI (o `./src/no4nn.sh --audit`) audita un dispositivo autorizado **antes de cualquier conexión**: claves RSA autorizadas en `/data/misc/adb/adb_keys` contrastadas con la clave del operador, propiedades de depuración (`ro.debuggable`, `ro.adb.secure`, `service.adb.tcp.port`), exposición en red (interfaces y puertos en escucha), el puerto TCP 5555 (estado interno en `/proc/net/tcp` y sonda de red), fugas de datos sensibles en los registros (tokens, contraseñas, PII — el registro crudo nunca se guarda, solo conteos y muestras redactadas) y apps de terceros depurables (`pm list packages -3` cruzado con `dumpsys package`). Cada comprobación queda en su propio archivo bajo `~/security-tools/audits/AUDITORIA-<fecha>_<serial>/`, con `RESUMEN.txt` (veredicto OK / ADVERTENCIA / CRÍTICO) y `MANIFIESTO.txt`. La aleatorización (orden barajado con `--seed`, pausas aleatorias y timeout de sonda aleatorio) evita una firma predecible en la sonda; con la misma semilla, el plan y la ejecución usan el mismo orden. Consulta [docs/auditoria-adb.md](docs/auditoria-adb.md).
 
 ## Integración con Ubuntu
 

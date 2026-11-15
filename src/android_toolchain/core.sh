@@ -25,6 +25,14 @@ TRACES_SERIAL=""
 TRACES_DIR=""
 TRACES_SOURCES=""
 TRACES_CONFIRM=0
+AUDIT_ONLY=0
+AUDIT_SERIAL=""
+AUDIT_DIR=""
+AUDIT_CHECKS=""
+AUDIT_EXPECTED_KEY=""
+AUDIT_SEED=""
+AUDIT_NO_NETWORK_PROBE=0
+AUDIT_CONFIRM=0
 BANNER_STYLE="${BANNER_STYLE:-$((RANDOM % 3))}"
 
 banner() {
@@ -83,6 +91,17 @@ Trazas ADB (no instala nada; captura procesos, fallos y kernel):
   --traces-sources LISTA Fuentes separadas por coma (ver traces.sh --help).
   --traces-confirm       Confirmación explícita para una captura real.
                          Sin --dry-run ni --traces-confirm la captura se rechaza.
+
+Auditoría ADB (no instala nada; claves RSA, depuración, red y puerto 5555):
+  --audit                Solo auditoría; no ejecuta las fases de instalación.
+  --audit-serial SERIAL  Serial del dispositivo (verificado en `adb devices`; alias: --serial).
+  --audit-dir PATH       Directorio base de evidencia (default: $HOME/security-tools/audits).
+  --audit-checks LISTA   Comprobaciones separadas por coma (ver audit.sh --help).
+  --audit-expected-key PATH Clave pública del operador para contrastar las autorizadas.
+  --audit-seed N         Semilla de la aleatorización (orden, pausas, timeout de sonda).
+  --audit-sin-sonda-red  Omite la sonda TCP desde la red al puerto 5555.
+  --audit-confirm        Confirmación explícita para una auditoría real.
+                         Sin --dry-run ni --audit-confirm la auditoría se rechaza.
 
 Variables:
   JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
@@ -318,6 +337,20 @@ run_traces() {
     "${args[@]}"
 }
 
+run_audit() {
+    local -a args=(bash "$ROOT_DIR/src/android_toolchain/audit.sh")
+    [[ -n "$AUDIT_SERIAL" ]] && args+=(--serial "$AUDIT_SERIAL")
+    [[ -n "$AUDIT_DIR" ]] && args+=(--out-dir "$AUDIT_DIR")
+    [[ -n "$AUDIT_CHECKS" ]] && args+=(--checks "$AUDIT_CHECKS")
+    [[ -n "$AUDIT_EXPECTED_KEY" ]] && args+=(--expected-key "$AUDIT_EXPECTED_KEY")
+    [[ -n "$AUDIT_SEED" ]] && args+=(--seed "$AUDIT_SEED")
+    (( AUDIT_NO_NETWORK_PROBE )) && args+=(--sin-sonda-red)
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    (( AUDIT_CONFIRM )) && args+=(--confirm)
+    "${args[@]}"
+}
+
 android_toolchain_main() {
     while (($#)); do
         case "$1" in
@@ -331,19 +364,33 @@ android_toolchain_main() {
             --interactive) INTERACTIVE=1; shift ;;
             --guided) GUIDED=1; shift ;;
             --traces) TRACES_ONLY=1; shift ;;
-            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; shift 2 ;;
+            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; shift 2 ;;
             --traces-dir) (($# >= 2)) || fail "--traces-dir requiere PATH"; TRACES_DIR="$2"; shift 2 ;;
             --traces-sources) (($# >= 2)) || fail "--traces-sources requiere LISTA"; TRACES_SOURCES="$2"; shift 2 ;;
             --traces-confirm) TRACES_CONFIRM=1; shift ;;
+            --audit) AUDIT_ONLY=1; shift ;;
+            --audit-serial) (($# >= 2)) || fail "--audit-serial requiere SERIAL"; AUDIT_SERIAL="$2"; shift 2 ;;
+            --audit-dir) (($# >= 2)) || fail "--audit-dir requiere PATH"; AUDIT_DIR="$2"; shift 2 ;;
+            --audit-checks) (($# >= 2)) || fail "--audit-checks requiere LISTA"; AUDIT_CHECKS="$2"; shift 2 ;;
+            --audit-expected-key) (($# >= 2)) || fail "--audit-expected-key requiere PATH"; AUDIT_EXPECTED_KEY="$2"; shift 2 ;;
+            --audit-seed) (($# >= 2)) || fail "--audit-seed requiere N"; AUDIT_SEED="$2"; shift 2 ;;
+            --audit-sin-sonda-red) AUDIT_NO_NETWORK_PROBE=1; shift ;;
+            --audit-confirm) AUDIT_CONFIRM=1; shift ;;
             -h|--help) usage; return 0 ;;
             *) fail "opción desconocida: $1" ;;
         esac
     done
 
     (( STATIC_ONLY && DYNAMIC_ONLY )) && fail "--static-only y --dynamic-only son excluyentes"
+    (( TRACES_ONLY && AUDIT_ONLY )) && fail "--traces y --audit son excluyentes"
     if (( TRACES_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--traces no se combina con --static-only ni --dynamic-only"
         run_traces
+        return $?
+    fi
+    if (( AUDIT_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--audit no se combina con --static-only ni --dynamic-only"
+        run_audit
         return $?
     fi
     validate_style
