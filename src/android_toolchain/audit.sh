@@ -157,7 +157,7 @@ shuffled_checks() {
     local i j tmp
     for (( i = ${#items[@]} - 1; i > 0; i-- )); do
         j=$(( RANDOM % (i + 1) ))
-        tmp="${items[$i]}"; items[$i]="${items[$j]}"; items[$j]="$tmp"
+        tmp="${items[i]}"; items[i]="${items[j]}"; items[j]="$tmp"
     done
     printf '%s\n' "${items[@]}"
 }
@@ -279,18 +279,22 @@ run_check() {
                     printf '%s=%s\n' "$prop" "${value:-<vacío>}"
                 done
             } >"$file" 2>"$file.err" || code=$?
+            # Se leen los valores antes de añadir el análisis al archivo:
+            # leer y escribir el mismo archivo en el mismo bloque es
+            # frágil y ShellCheck lo marca (SC2094).
+            local debuggable secure adb_secure tcp_port build_type
+            debuggable="$(grep -E '^ro\.debuggable=' "$file" | cut -d= -f2-)"
+            secure="$(grep -E '^ro\.secure=' "$file" | cut -d= -f2-)"
+            adb_secure="$(grep -E '^ro\.adb\.secure=' "$file" | cut -d= -f2-)"
+            tcp_port="$(grep -E '^service\.adb\.tcp\.port=' "$file" | cut -d= -f2-)"
+            build_type="$(grep -E '^ro\.build\.type=' "$file" | cut -d= -f2-)"
             {
                 printf '\n== ANÁLISIS ==\n'
-                local debuggable secure adb_secure tcp_port
-                debuggable="$(grep -E '^ro\.debuggable=' "$file" | cut -d= -f2-)"
-                secure="$(grep -E '^ro\.secure=' "$file" | cut -d= -f2-)"
-                adb_secure="$(grep -E '^ro\.adb\.secure=' "$file" | cut -d= -f2-)"
-                tcp_port="$(grep -E '^service\.adb\.tcp\.port=' "$file" | cut -d= -f2-)"
                 [[ "$debuggable" == "1" ]] && { printf 'ro.debuggable=1: el sistema es depurable\n'; verdict="CRÍTICO"; }
                 [[ "$secure" == "0" ]] && { printf 'ro.secure=0: adbd corre como root\n'; verdict="CRÍTICO"; }
                 [[ "$tcp_port" == "5555" ]] && { printf 'service.adb.tcp.port=5555: ADB por TCP activado en el dispositivo\n'; verdict="CRÍTICO"; }
                 [[ "$adb_secure" == "0" ]] && { printf 'ro.adb.secure=0: la autorización RSA está desactivada\n'; [[ "$verdict" != "CRÍTICO" ]] && verdict="ADVERTENCIA"; }
-                grep -qE '^ro\.build\.type=(userdebug|eng)$' "$file" && { printf 'build userdebug/eng: depuración ampliada\n'; [[ "$verdict" != "CRÍTICO" ]] && verdict="ADVERTENCIA"; }
+                [[ "$build_type" == "userdebug" || "$build_type" == "eng" ]] && { printf 'build userdebug/eng: depuración ampliada\n'; [[ "$verdict" != "CRÍTICO" ]] && verdict="ADVERTENCIA"; }
                 [[ "$verdict" == "OK" ]] && printf 'sin indicadores de depuración activa\n'
             } >>"$file"
             ;;
@@ -312,11 +316,12 @@ run_check() {
                     fi
                 fi
             } >"$file" 2>"$file.err" || code=$?
+            # Se calcula antes de añadir el análisis al archivo (SC2094).
+            local listen
+            listen="$(grep -E 'LISTEN|:0A' "$file" | grep -vE '127\.0\.0\.1|::1' || true)"
             {
                 printf '\n== ANÁLISIS ==\n'
                 # Puertos en escucha fuera de loopback, según ss/netstat o /proc/net/tcp.
-                local listen
-                listen="$(grep -E 'LISTEN|:0A' "$file" | grep -vE '127\.0\.0\.1|::1' || true)"
                 if [[ -n "$listen" ]]; then
                     printf 'puertos TCP en escucha en interfaces no loopback:\n%s\n' "$listen"
                     verdict="ADVERTENCIA"
@@ -327,17 +332,21 @@ run_check() {
             ;;
         puerto-5555)
             local listen_5555=0 probe_open=0 probe_done=0
+            # Las lecturas se hacen antes de escribir el archivo, con su
+            # propio código de fallo: el $? de un bloque de escritura
+            # sería el del último echo, no el de adb (SC2320).
+            local tcp_out tcp6_out tcp_code=0
+            tcp_out="$("${base[@]}" shell cat /proc/net/tcp 2>/dev/null)" || tcp_code=1
+            tcp6_out="$("${base[@]}" shell cat /proc/net/tcp6 2>/dev/null)" || tcp_code=1
+            code="$tcp_code"
+            local entries
+            entries="$(printf '%s\n%s\n' "$tcp_out" "$tcp6_out" | awk '$2 ~ /:15B3$/ && $4 == "0A" {print $2}')"
             {
                 echo "== estado interno (/proc/net/tcp y /proc/net/tcp6) =="
-                local tcp_out tcp6_out
-                tcp_out="$("${base[@]}" shell cat /proc/net/tcp 2>/dev/null || true)"
-                tcp6_out="$("${base[@]}" shell cat /proc/net/tcp6 2>/dev/null || true)"
                 printf '%s\n%s\n' "$tcp_out" "$tcp6_out"
                 echo "== entradas en escucha (LISTEN, estado 0A) con puerto 15B3 (5555) =="
                 # :15B3 es 5555 en hexadecimal; el campo 4 es el estado (0A = LISTEN).
                 # La IP local viene en hexadecimal little-endian; 00000000 = todas las interfaces.
-                local entries
-                entries="$(printf '%s\n%s\n' "$tcp_out" "$tcp6_out" | awk '$2 ~ /:15B3$/ && $4 == "0A" {print $2}')"
                 if [[ -n "$entries" ]]; then
                     listen_5555=1
                     printf '%s\n' "$entries"
@@ -349,7 +358,7 @@ run_check() {
                 else
                     echo "sin entradas 5555 en LISTEN en /proc/net/tcp*"
                 fi
-            } >"$file" 2>"$file.err" || code=$?
+            } >"$file" 2>"$file.err"
             if (( NO_NETWORK_PROBE )); then
                 printf 'sonda de red omitida con --sin-sonda-red\n' >>"$file"
             else
@@ -360,7 +369,7 @@ run_check() {
                 local i j tmp
                 for (( i = ${#ips[@]} - 1; i > 0; i-- )); do
                     j=$(( RANDOM % (i + 1) ))
-                    tmp="${ips[$i]}"; ips[$i]="${ips[$j]}"; ips[$j]="$tmp"
+                    tmp="${ips[i]}"; ips[i]="${ips[j]}"; ips[j]="$tmp"
                 done
                 {
                     printf '\n== sonda de red (timeout %d s por IP, orden aleatorio) ==\n' "$probe_timeout"
@@ -593,7 +602,7 @@ audit() {
     local check file first=1
     mapfile -t _order < <(shuffled_checks "$seed")
     for check in "${_order[@]}"; do
-        (( first )) && first=0 || jitter
+        if (( first )); then first=0; else jitter; fi
         file="$run_dir/$(file_for_check "$check")"
         run_check "$check" "$file"
     done
