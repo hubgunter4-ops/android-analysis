@@ -1,3 +1,14 @@
+android-analysis-toolchain (2.2.0) unstable; urgency=medium
+
+  * Apartado ENCRYPT: verificar el cifrado del sistema (ro.crypto.*,
+    veredicto CIFRADO/SIN CIFRAR/DESCONOCIDO; no activa el cifrado),
+    cifrar/descifrar archivos con OpenSSL AES-256-CBC + PBKDF2 y
+    app compañera DeviceCrypt 1.0 (AES/GCM + Android Keystore,
+    formato .crypt) en android-app/, instalable con adb install.
+  * Pestaña ENCRYPT en la GUI y CLI --encrypt.
+
+ -- hubgunter4-ops <2.72937384e+08+hubgunter4-ops@users.noreply.github.com>  Sun, 15 Nov 2026 11:50:00 -0600
+
 android-analysis-toolchain (2.1.0) unstable; urgency=medium
 
   * Apartado de trazas ADB: procesos, fallos/errores y registro del kernel.

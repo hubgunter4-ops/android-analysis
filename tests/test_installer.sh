@@ -338,6 +338,37 @@ grep -q 'Solicitar bugreport' src/ui/analyze_view.py
 grep -q 'docs/analizar-trazas.md' README.md
 rm -rf "$(dirname "$analyze_cap")" "$analyze_out"
 
+# Apartado de listado de apps (uso, conexiones, datos, acciones, PID).
+bash -n src/android_toolchain/apps.sh
+bash src/no4nn.sh --help | grep -q -- '--apps'
+bash src/no4nn.sh --help | grep -q -- '--apps-todas'
+bash src/android_toolchain/apps.sh --help | grep -q -- '--todas'
+apps_plan="$(bash src/no4nn.sh --apps --dry-run --serial emulator-5554)"
+grep -q 'PLAN DE APPS ADB' <<<"$apps_plan"
+grep -q 'pm list packages' <<<"$apps_plan"
+grep -q 'dumpsys netstats' <<<"$apps_plan"
+grep -q 'ps -A' <<<"$apps_plan"
+grep -q 'sistema: no' <<<"$apps_plan"
+grep -q 'sistema: sí' <<<"$(bash src/no4nn.sh --apps --dry-run --apps-todas)"
+if bash src/no4nn.sh --apps --plan-json --apps-todas | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["todas"] is True and len(d["sources"]) == 10'; then
+    :
+else
+    echo 'plan JSON de apps inválido' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --apps --serial emulator-5554 >/dev/null 2>&1; then
+    echo 'recogida de apps sin --confirm no fue rechazada' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --apps --traces --dry-run >/dev/null 2>&1; then
+    echo '--apps combinado con --traces no fue rechazado' >&2
+    exit 1
+fi
+grep -q 'AppsView' src/no4nn_gui.py
+grep -q 'APPS' src/no4nn_gui.py
+grep -q 'Detectar' src/ui/apps_view.py
+grep -q 'docs/apps-uso-conexiones.md' README.md
+
 # Auditoría real contra un adb falso (sin dispositivo).
 audit_bin="$(mktemp -d)"
 audit_out="$(mktemp -d)"
@@ -435,6 +466,123 @@ grep -q 'SHA-256' "$run_dir/MANIFIESTO.txt"
 test "$(stat -c %a "$run_dir")" = 700
 test ! -e "$run_dir/09-bugreport.zip"
 rm -rf "$fake_bin" "$fake_out" "$fake_out.log"
+
+# Apartado de ENCRYPT: verificar cifrado, cifrar/descifrar archivos e instalar la app.
+bash -n src/android_toolchain/encrypt.sh
+bash src/no4nn.sh --help | grep -q -- '--encrypt'
+bash src/android_toolchain/encrypt.sh --help | grep -q -- '--mode'
+bash src/android_toolchain/encrypt.sh --help | grep -q -- '--password-file'
+bash src/android_toolchain/encrypt.sh --help | grep -q -- '--confirm'
+
+encrypt_plan="$(bash src/no4nn.sh --encrypt --dry-run --serial emulator-5554)"
+grep -q 'getprop ro.crypto.state' <<<"$encrypt_plan"
+grep -q 'getprop ro.crypto.type' <<<"$encrypt_plan"
+grep -q 'NO activa el cifrado' <<<"$encrypt_plan"
+grep -q 'openssl enc -aes-256-cbc -pbkdf2 -salt' <<<"$(bash src/no4nn.sh --encrypt --dry-run --encrypt-mode encrypt-file --encrypt-file /tmp/nota.txt --encrypt-password-file /tmp/pw)"
+
+if bash src/no4nn.sh --encrypt --dry-run --encrypt-mode foo >/dev/null 2>&1; then
+    echo 'modo de encrypt desconocido no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --encrypt --dry-run --encrypt-serial 'bad;rm' >/dev/null 2>&1; then
+    echo 'serial de encrypt no válido no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --encrypt --dry-run --encrypt-dir ../escape >/dev/null 2>&1; then
+    echo 'directorio de encrypt con traversal no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --encrypt --serial emulator-5554 >/dev/null 2>&1; then
+    echo 'operación de encrypt sin --confirm no fue rechazada' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --encrypt --traces --dry-run >/dev/null 2>&1; then
+    echo '--encrypt combinado con --traces no fue rechazado' >&2
+    exit 1
+fi
+if bash src/no4nn.sh --encrypt --plan-json --encrypt-mode encrypt-file --encrypt-file /tmp/nota.txt | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["mode"] == "encrypt-file" and d["out"] == "/tmp/nota.txt.aes256" and d["file"] == "/tmp/nota.txt"'; then
+    :
+else
+    echo 'plan JSON de encrypt inválido' >&2
+    exit 1
+fi
+
+# Alcance: serial de encrypt fuera de alcance se rechaza.
+encrypt_scope_dir="$(mktemp -d)"
+printf 'serial:emulator-5554\n' >"$encrypt_scope_dir/scope"
+if bash src/no4nn.sh --encrypt --dry-run --serial emulator-9999 --scope-file "$encrypt_scope_dir/scope" >/dev/null 2>&1; then
+    echo 'serial de encrypt fuera de alcance no fue rechazado' >&2
+    exit 1
+fi
+bash src/no4nn.sh --encrypt --dry-run --serial emulator-5554 --scope-file "$encrypt_scope_dir/scope" >/dev/null
+rm -rf "$encrypt_scope_dir"
+
+# Operación real de cifrado/descifrado con OpenSSL (sin dispositivo).
+encrypt_bin="$(mktemp -d)"
+encrypt_out="$(mktemp -d)"
+printf 'contraseña-de-prueba' >"$encrypt_bin/pw.txt"
+chmod 600 "$encrypt_bin/pw.txt"
+printf 'contenido confidencial de prueba 12345\n' >"$encrypt_bin/nota.txt"
+bash src/android_toolchain/encrypt.sh --mode encrypt-file --file "$encrypt_bin/nota.txt" \
+    --out "$encrypt_bin/nota.txt.aes256" --password-file "$encrypt_bin/pw.txt" \
+    --out-dir "$encrypt_out" --confirm >/dev/null
+head -c 8 "$encrypt_bin/nota.txt.aes256" | grep -q 'Salted__'
+bash src/android_toolchain/encrypt.sh --mode decrypt-file --file "$encrypt_bin/nota.txt.aes256" \
+    --out "$encrypt_bin/nota-dec.txt" --password-file "$encrypt_bin/pw.txt" \
+    --out-dir "$encrypt_out" --confirm >/dev/null
+diff "$encrypt_bin/nota.txt" "$encrypt_bin/nota-dec.txt"
+test "$(stat -c %a "$(find "$encrypt_out" -mindepth 1 -maxdepth 1 -type d | head -n 1)")" = 700
+grep -q 'aes-256-cbc' "$(find "$encrypt_out" -name RESUMEN.txt | head -n 1)"
+# La contraseña con permisos abiertos se rechaza y se borra tras su uso si se pide.
+chmod 644 "$encrypt_bin/pw.txt"
+if bash src/android_toolchain/encrypt.sh --mode encrypt-file --file "$encrypt_bin/nota.txt" \
+    --password-file "$encrypt_bin/pw.txt" --out-dir "$encrypt_out" --confirm >/dev/null 2>&1; then
+    echo 'archivo de contraseña 644 no fue rechazado' >&2
+    exit 1
+fi
+chmod 600 "$encrypt_bin/pw.txt"
+bash src/android_toolchain/encrypt.sh --mode encrypt-file --file "$encrypt_bin/nota.txt" \
+    --out "$encrypt_bin/nota2.txt.aes256" --password-file "$encrypt_bin/pw.txt" \
+    --delete-password-file --out-dir "$encrypt_out" --confirm >/dev/null
+test ! -e "$encrypt_bin/pw.txt"
+rm -rf "$encrypt_bin" "$encrypt_out"
+
+# Verificación e instalación contra un adb falso (sin dispositivo).
+encrypt_fake_bin="$(mktemp -d)"
+encrypt_fake_out="$(mktemp -d)"
+cat >"$encrypt_fake_bin/adb" <<'FAKEADB'
+#!/usr/bin/env bash
+args=("$@")
+if [[ "${args[0]:-}" == "-s" ]]; then args=("${args[@]:2}"); fi
+case "${args[*]}" in
+  "devices") printf 'List of devices attached\nemulator-5554\tdevice\n' ;;
+  "shell getprop ro.crypto.state") printf 'encrypted\n' ;;
+  "shell getprop ro.crypto.type") printf 'file\n' ;;
+  "shell getprop ro.crypto.fde_algorithm") printf '\n' ;;
+  "shell getprop ro.crypto.metadata.enabled") printf 'true\n' ;;
+  "install -r /tmp/fake-devicecrypt.apk") printf 'Performing Streamed Install\nSuccess\n' ;;
+  *) echo "fake adb: comando no esperado: ${args[*]}" >&2; exit 3 ;;
+esac
+FAKEADB
+chmod +x "$encrypt_fake_bin/adb"
+printf 'FAKEAPK' > /tmp/fake-devicecrypt.apk
+PATH="$encrypt_fake_bin:$PATH" bash src/android_toolchain/encrypt.sh --mode verify \
+    --serial emulator-5554 --out-dir "$encrypt_fake_out" --confirm >/dev/null
+encrypt_run="$(find "$encrypt_fake_out" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+test -s "$encrypt_run/01-cifrado-sistema.txt"
+grep -q 'veredicto: CIFRADO' "$encrypt_run/01-cifrado-sistema.txt"
+grep -q 'ro.crypto.type=file' "$encrypt_run/01-cifrado-sistema.txt"
+grep -q 'CIFRADO' "$encrypt_run/RESUMEN.txt"
+PATH="$encrypt_fake_bin:$PATH" bash src/android_toolchain/encrypt.sh --mode install-app \
+    --serial emulator-5554 --apk /tmp/fake-devicecrypt.apk --out-dir "$encrypt_fake_out" --confirm >/dev/null
+encrypt_run="$(dirname "$(find "$encrypt_fake_out" -name 01-instalar-app.txt | head -n 1)")"
+grep -q 'Success' "$encrypt_run/01-instalar-app.txt"
+rm -rf "$encrypt_fake_bin" "$encrypt_fake_out" /tmp/fake-devicecrypt.apk
+
+grep -q 'askyesno' src/ui/encrypt_view.py
+grep -q 'EncryptView' src/no4nn_gui.py
+grep -q 'ENCRYPT' src/no4nn_gui.py
+grep -q 'docs/encrypt-android.md' README.md
 
 test -s requirements.lock
 grep -q '^setuptools==' requirements.lock

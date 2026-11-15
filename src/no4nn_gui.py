@@ -11,9 +11,11 @@ try:
     from ui import theme
     from ui.adb_view import ADBView
     from ui.analyze_view import AnalyzeView
+    from ui.apps_view import AppsView
     from ui.audit_view import AuditView
     from ui.connect_view import ConnectView
     from ui.diagnostics import run as run_diagnostics
+    from ui.encrypt_view import EncryptView
     from ui.installer_view import InstallerView
     from ui.process_runner import ProcessRunner
     from ui.traces_view import TracesView
@@ -21,9 +23,11 @@ except ModuleNotFoundError:  # Importación como ``src.no4nn_gui`` durante prueb
     from src.ui import theme
     from src.ui.adb_view import ADBView
     from src.ui.analyze_view import AnalyzeView
+    from src.ui.apps_view import AppsView
     from src.ui.audit_view import AuditView
     from src.ui.connect_view import ConnectView
     from src.ui.diagnostics import run as run_diagnostics
+    from src.ui.encrypt_view import EncryptView
     from src.ui.installer_view import InstallerView
     from src.ui.process_runner import ProcessRunner
     from src.ui.traces_view import TracesView
@@ -71,24 +75,30 @@ class ToolchainGUI(tk.Tk):
         audit_tab = AuditView(notebook, self.start_process, self.cancel_process)
         connect_tab = ConnectView(notebook, self.start_process, self.cancel_process)
         analyze_tab = AnalyzeView(notebook, self.start_process, self.cancel_process)
+        encrypt_tab = EncryptView(notebook, self.start_process, self.cancel_process)
+        apps_tab = AppsView(notebook, self.start_process, self.cancel_process)
         notebook.add(installer_tab, text="  INSTALADOR  ")
         notebook.add(adb_tab, text="  MÓDULOS ADB  ")
         notebook.add(traces_tab, text="  TRAZAS ADB  ")
         notebook.add(audit_tab, text="  AUDITORÍA ADB  ")
         notebook.add(connect_tab, text="  CONEXIÓN ADB  ")
         notebook.add(analyze_tab, text="  ANALIZAR TRAZAS  ")
+        notebook.add(encrypt_tab, text="  ENCRYPT  ")
+        notebook.add(apps_tab, text="  APPS  ")
         self.installer_view = installer_tab
         self.adb_view = adb_tab
         self.traces_view = traces_tab
         self.audit_view = audit_tab
         self.connect_view = connect_tab
         self.analyze_view = analyze_tab
+        self.encrypt_view = encrypt_tab
+        self.apps_view = apps_tab
 
         status_bar = ttk.Frame(outer, style="Header.TFrame")
         status_bar.pack(fill="x", pady=(14, 0))
         ttk.Label(status_bar, text="●", foreground=theme.SUCCESS, background=theme.BG).pack(side="left", padx=(0, 7))
         ttk.Label(status_bar, textvariable=self.status, style="Subtitle.TLabel").pack(side="left")
-        ttk.Label(status_bar, text="v2.1.0  ·  secure provisioning", style="Subtitle.TLabel").pack(side="right")
+        ttk.Label(status_bar, text="v2.2.0  ·  secure provisioning", style="Subtitle.TLabel").pack(side="right")
 
     def show_diagnostics(self) -> None:
         """Ejecuta solo comprobaciones locales y muestra el resultado."""
@@ -121,12 +131,16 @@ class ToolchainGUI(tk.Tk):
         self.audit_view.set_running(True)
         self.connect_view.set_running(True)
         self.analyze_view.set_running(True)
+        self.encrypt_view.set_running(True)
+        self.apps_view.set_running(True)
         if not self.runner.start(command):
             self.installer_view.set_running(False)
             self.traces_view.set_running(False)
             self.audit_view.set_running(False)
             self.connect_view.set_running(False)
             self.analyze_view.set_running(False)
+            self.encrypt_view.set_running(False)
+            self.apps_view.set_running(False)
             self.status.set("No se pudo iniciar el proceso")
             return False
         return True
@@ -151,6 +165,8 @@ class ToolchainGUI(tk.Tk):
             self.audit_view.set_running(False)
             self.connect_view.set_running(False)
             self.analyze_view.set_running(False)
+            self.encrypt_view.set_running(False)
+            self.apps_view.set_running(False)
             self.status.set(f"Terminado · código {value}")
             self._fire_done_hook()
         elif kind == "error":
@@ -159,6 +175,8 @@ class ToolchainGUI(tk.Tk):
             self.audit_view.set_running(False)
             self.connect_view.set_running(False)
             self.analyze_view.set_running(False)
+            self.encrypt_view.set_running(False)
+            self.apps_view.set_running(False)
             if self.active_output is not None:
                 self._append_output(self.active_output, f"Error al iniciar el proceso: {value}\n")
             self.status.set("Error al iniciar el proceso")

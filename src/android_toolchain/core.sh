@@ -6,7 +6,7 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-VERSION="2.1.0"
+VERSION="2.2.0"
 TOOLS_DIR="${TOOLS_DIR:-$HOME/security-tools}"
 JADX_VERSION="1.5.6"
 JADX_URL="https://github.com/skylot/jadx/releases/download/v${JADX_VERSION}/jadx-${JADX_VERSION}.zip"
@@ -49,6 +49,21 @@ ANALYZE_SERIAL=""
 ANALYZE_CONFIRM=0
 ANALYZE_MAX_MUESTRAS=""
 ANALYZE_TIMEOUT=""
+ENCRYPT_ONLY=0
+ENCRYPT_SERIAL=""
+ENCRYPT_DIR=""
+ENCRYPT_MODE="verify"
+ENCRYPT_FILE=""
+ENCRYPT_OUT=""
+ENCRYPT_PASSWORD_FILE=""
+ENCRYPT_DELETE_PASSWORD_FILE=0
+ENCRYPT_APK=""
+ENCRYPT_CONFIRM=0
+APPS_ONLY=0
+APPS_SERIAL=""
+APPS_DIR=""
+APPS_TODAS=0
+APPS_CONFIRM=0
 SCOPE_FILE=""
 BANNER_STYLE="${BANNER_STYLE:-$((RANDOM % 3))}"
 
@@ -144,6 +159,30 @@ Auditoría ADB (no instala nada; claves RSA, depuración, red y puerto 5555):
   --analyze-confirm      Confirmación explícita para pedir un bugreport.
                          Sin --dry-run ni --analyze-confirm la petición se rechaza.
                          Analizar archivos ya subidos no exige confirmación.
+
+  --encrypt              Solo cifrado; no ejecuta las fases de instalación.
+                         Verifica el cifrado del sistema (NO lo activa:
+                         FBE de fábrica desde Android 10) y cifra/descifra
+                         archivos con AES-256-CBC + PBKDF2 (OpenSSL).
+  --encrypt-serial SERIAL Serial del dispositivo (alias: --serial).
+  --encrypt-dir PATH     Directorio base de evidencia (default: $HOME/security-tools/encrypt).
+  --encrypt-mode MODO    verify | encrypt-file | decrypt-file | install-app (default: verify).
+  --encrypt-file RUTA    Archivo de entrada (encrypt-file / decrypt-file).
+  --encrypt-out RUTA     Archivo de salida (default: <entrada>.aes256 al cifrar).
+  --encrypt-password-file RUTA
+                         Archivo 0600 con la contraseña (encrypt-file / decrypt-file).
+  --encrypt-delete-password-file
+                         Borra el archivo de contraseña tras usarlo (solo real).
+  --encrypt-apk RUTA     APK de DeviceCrypt a instalar (default: android-app/app-debug.apk).
+  --encrypt-confirm      Confirmación explícita para una operación real.
+                         Sin --dry-run ni --encrypt-confirm la operación se rechaza.
+
+  --apps                 Solo listado de apps; no ejecuta las fases de instalación.
+  --apps-serial SERIAL   Serial del dispositivo (alias: --serial).
+  --apps-dir PATH        Directorio base de evidencia (default: $HOME/security-tools/apps).
+  --apps-todas           Incluir también las apps del sistema (default: solo terceros).
+  --apps-confirm         Confirmación explícita para una recogida real.
+                         Sin --dry-run ni --apps-confirm la recogida se rechaza.
 
 Variables:
   JADX_SHA256             Compatibilidad: solo se acepta el SHA-256 fijado de JADX ${JADX_VERSION}.
@@ -476,6 +515,35 @@ run_analyze() {
     "${args[@]}"
 }
 
+run_encrypt() {
+    local -a args=(bash "$ROOT_DIR/src/android_toolchain/encrypt.sh")
+    [[ -n "$ENCRYPT_SERIAL" ]] && args+=(--serial "$ENCRYPT_SERIAL")
+    [[ -n "$ENCRYPT_DIR" ]] && args+=(--out-dir "$ENCRYPT_DIR")
+    [[ -n "$ENCRYPT_MODE" ]] && args+=(--mode "$ENCRYPT_MODE")
+    [[ -n "$ENCRYPT_FILE" ]] && args+=(--file "$ENCRYPT_FILE")
+    [[ -n "$ENCRYPT_OUT" ]] && args+=(--out "$ENCRYPT_OUT")
+    [[ -n "$ENCRYPT_PASSWORD_FILE" ]] && args+=(--password-file "$ENCRYPT_PASSWORD_FILE")
+    (( ENCRYPT_DELETE_PASSWORD_FILE )) && args+=(--delete-password-file)
+    [[ -n "$ENCRYPT_APK" ]] && args+=(--apk "$ENCRYPT_APK")
+    [[ -n "$SCOPE_FILE" ]] && args+=(--scope-file "$SCOPE_FILE")
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    (( ENCRYPT_CONFIRM )) && args+=(--confirm)
+    "${args[@]}"
+}
+
+run_apps() {
+    local -a args=(bash "$ROOT_DIR/src/android_toolchain/apps.sh")
+    [[ -n "$APPS_SERIAL" ]] && args+=(--serial "$APPS_SERIAL")
+    [[ -n "$APPS_DIR" ]] && args+=(--out-dir "$APPS_DIR")
+    (( APPS_TODAS )) && args+=(--todas)
+    [[ -n "$SCOPE_FILE" ]] && args+=(--scope-file "$SCOPE_FILE")
+    (( DRY_RUN )) && args+=(--dry-run)
+    (( PLAN_JSON )) && args+=(--plan-json)
+    (( APPS_CONFIRM )) && args+=(--confirm)
+    "${args[@]}"
+}
+
 android_toolchain_main() {
     while (($#)); do
         case "$1" in
@@ -489,7 +557,7 @@ android_toolchain_main() {
             --interactive) INTERACTIVE=1; shift ;;
             --guided) GUIDED=1; shift ;;
             --traces) TRACES_ONLY=1; shift ;;
-            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; CONNECT_SERIAL="$2"; ANALYZE_SERIAL="$2"; shift 2 ;;
+            --traces-serial|--serial) (($# >= 2)) || fail "--traces-serial requiere SERIAL"; TRACES_SERIAL="$2"; AUDIT_SERIAL="$2"; CONNECT_SERIAL="$2"; ANALYZE_SERIAL="$2"; ENCRYPT_SERIAL="$2"; APPS_SERIAL="$2"; shift 2 ;;
             --traces-dir) (($# >= 2)) || fail "--traces-dir requiere PATH"; TRACES_DIR="$2"; shift 2 ;;
             --traces-sources) (($# >= 2)) || fail "--traces-sources requiere LISTA"; TRACES_SOURCES="$2"; shift 2 ;;
             --traces-confirm) TRACES_CONFIRM=1; shift ;;
@@ -517,6 +585,21 @@ android_toolchain_main() {
             --analyze-timeout) (($# >= 2)) || fail "--analyze-timeout requiere N"; ANALYZE_TIMEOUT="$2"; shift 2 ;;
             --analyze-max-muestras) (($# >= 2)) || fail "--analyze-max-muestras requiere N"; ANALYZE_MAX_MUESTRAS="$2"; shift 2 ;;
             --analyze-confirm) ANALYZE_CONFIRM=1; shift ;;
+            --encrypt) ENCRYPT_ONLY=1; shift ;;
+            --encrypt-serial) (($# >= 2)) || fail "--encrypt-serial requiere SERIAL"; ENCRYPT_SERIAL="$2"; shift 2 ;;
+            --encrypt-dir) (($# >= 2)) || fail "--encrypt-dir requiere PATH"; ENCRYPT_DIR="$2"; shift 2 ;;
+            --encrypt-mode) (($# >= 2)) || fail "--encrypt-mode requiere MODO"; ENCRYPT_MODE="$2"; shift 2 ;;
+            --encrypt-file) (($# >= 2)) || fail "--encrypt-file requiere RUTA"; ENCRYPT_FILE="$2"; shift 2 ;;
+            --encrypt-out) (($# >= 2)) || fail "--encrypt-out requiere RUTA"; ENCRYPT_OUT="$2"; shift 2 ;;
+            --encrypt-password-file) (($# >= 2)) || fail "--encrypt-password-file requiere RUTA"; ENCRYPT_PASSWORD_FILE="$2"; shift 2 ;;
+            --encrypt-delete-password-file) ENCRYPT_DELETE_PASSWORD_FILE=1; shift ;;
+            --encrypt-apk) (($# >= 2)) || fail "--encrypt-apk requiere RUTA"; ENCRYPT_APK="$2"; shift 2 ;;
+            --encrypt-confirm) ENCRYPT_CONFIRM=1; shift ;;
+            --apps) APPS_ONLY=1; shift ;;
+            --apps-serial) (($# >= 2)) || fail "--apps-serial requiere SERIAL"; APPS_SERIAL="$2"; shift 2 ;;
+            --apps-dir) (($# >= 2)) || fail "--apps-dir requiere PATH"; APPS_DIR="$2"; shift 2 ;;
+            --apps-todas) APPS_TODAS=1; shift ;;
+            --apps-confirm) APPS_CONFIRM=1; shift ;;
             --scope-file) (($# >= 2)) || fail "--scope-file requiere PATH"; SCOPE_FILE="$2"; shift 2 ;;
             -h|--help) usage; return 0 ;;
             *) fail "opción desconocida: $1" ;;
@@ -530,6 +613,15 @@ android_toolchain_main() {
     (( TRACES_ONLY && ANALYZE_ONLY )) && fail "--traces y --analyze son excluyentes"
     (( AUDIT_ONLY && ANALYZE_ONLY )) && fail "--audit y --analyze son excluyentes"
     (( CONNECT_ONLY && ANALYZE_ONLY )) && fail "--connect y --analyze son excluyentes"
+    (( TRACES_ONLY && ENCRYPT_ONLY )) && fail "--traces y --encrypt son excluyentes"
+    (( AUDIT_ONLY && ENCRYPT_ONLY )) && fail "--audit y --encrypt son excluyentes"
+    (( CONNECT_ONLY && ENCRYPT_ONLY )) && fail "--connect y --encrypt son excluyentes"
+    (( ANALYZE_ONLY && ENCRYPT_ONLY )) && fail "--analyze y --encrypt son excluyentes"
+    (( TRACES_ONLY && APPS_ONLY )) && fail "--traces y --apps son excluyentes"
+    (( AUDIT_ONLY && APPS_ONLY )) && fail "--audit y --apps son excluyentes"
+    (( CONNECT_ONLY && APPS_ONLY )) && fail "--connect y --apps son excluyentes"
+    (( ANALYZE_ONLY && APPS_ONLY )) && fail "--analyze y --apps son excluyentes"
+    (( ENCRYPT_ONLY && APPS_ONLY )) && fail "--encrypt y --apps son excluyentes"
     if (( TRACES_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--traces no se combina con --static-only ni --dynamic-only"
         run_traces
@@ -548,6 +640,16 @@ android_toolchain_main() {
     if (( ANALYZE_ONLY )); then
         (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--analyze no se combina con --static-only ni --dynamic-only"
         run_analyze
+        return $?
+    fi
+    if (( ENCRYPT_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--encrypt no se combina con --static-only ni --dynamic-only"
+        run_encrypt
+        return $?
+    fi
+    if (( APPS_ONLY )); then
+        (( STATIC_ONLY || DYNAMIC_ONLY )) && fail "--apps no se combina con --static-only ni --dynamic-only"
+        run_apps
         return $?
     fi
     validate_style

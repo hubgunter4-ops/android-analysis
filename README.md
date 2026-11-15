@@ -2,18 +2,18 @@
 
 [![CI](https://github.com/hubgunter4-ops/android-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/hubgunter4-ops/android-analysis/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](android-analysis-toolchain_2.1.0_all.deb)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](android-analysis-toolchain_2.2.0_all.deb)
 [![Python](https://img.shields.io/badge/python-3.12-blue.svg)](requirements.lock)
 
 ![Panel Tkinter de Android Analysis](docs/panel-tkinter.png)
 
-*Panel Tkinter con sus seis pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB y Analizar trazas.*
+*Panel Tkinter con sus ocho pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB, Analizar trazas, ENCRYPT y APPS.*
 
 ![Flujo de transición y operación](assets/operation-flow.png)
 
 ## Uso
 
-Panel gráfico (seis pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB y Analizar trazas):
+Panel gráfico (ocho pestañas: Instalador, Módulos ADB, Trazas ADB, Auditoría ADB, Conexión ADB, Analizar trazas, ENCRYPT y APPS):
 
 ```bash
 ./install.sh --gui
@@ -46,6 +46,18 @@ sudo -E ./install.sh --static-only
 ./src/no4nn.sh --analyze --dry-run --analyze-dir ~/security-tools/traces/20261115-101500_emulator-5554
 ./src/no4nn.sh --analyze --analyze-file ~/Descargas/bugreport.zip
 ./src/no4nn.sh --analyze --analyze-pedir-bugreport --analyze-serial emulator-5554 --analyze-confirm
+
+# Apps, uso, conexiones y desglose de datos (también acciones y PID heredado)
+./src/no4nn.sh --apps --dry-run --serial emulator-5554
+./src/no4nn.sh --apps --serial emulator-5554 --apps-confirm
+./src/no4nn.sh --apps --serial emulator-5554 --apps-todas --apps-confirm
+
+# ENCRYPT: verificar el cifrado del sistema (no lo activa) y cifrar archivos AES-256
+./src/no4nn.sh --encrypt --dry-run --serial emulator-5554
+./src/no4nn.sh --encrypt --serial emulator-5554 --encrypt-confirm
+./src/no4nn.sh --encrypt --encrypt-mode encrypt-file --encrypt-file ~/nota.txt \
+  --encrypt-password-file ~/.config/devicecrypt.pw --encrypt-confirm
+./src/no4nn.sh --encrypt --encrypt-mode install-app --serial emulator-5554 --encrypt-confirm
 ```
 
 Las operaciones reales de trazas y auditoría exigen `--confirm` (o confirmar el diálogo en la GUI) y verifican el serial en `adb devices` sin conectar nada automáticamente. La verificación de conexión es de solo lectura y no exige confirmación; forzar o conectar por TCP sí (ver `docs/conexion-adb.md`). La evidencia queda fuera del árbol del proyecto (`~/security-tools/traces/`, `~/security-tools/audits/` y `~/security-tools/connections/`), con manifiesto y SHA-256 por archivo. El alcance de laboratorio (`~/security-tools/scope`, allowlist de seriales e IPs TCP; ver `docs/alcance-laboratorio.md`) rechaza objetivos fuera de alcance; sin ese archivo, la allowlist está inactiva y el operador responde por cada objetivo. En la GUI, el botón **Detectar** rellena el serial con el dispositivo visible, el botón **Generar** crea una semilla de aleatorización para la auditoría, y cada módulo ADB tiene un botón **Ejecutar módulo en el dispositivo** que corre sus comandos en orden con una sola confirmación.
@@ -95,14 +107,14 @@ Punto de entrada principal: `./src/no4nn.sh`. Revisa siempre `--help` y la autor
 
 ### Versión CLI
 
-La interfaz de línea de comandos actual es **v2.1.0**. Se consulta con:
+La interfaz de línea de comandos actual es **v2.2.0**. Se consulta con:
 
 ```bash
 ./install.sh --help
 ./src/no4nn.sh --help
 ```
 
-El CLI soporta `--dry-run`, `--plan-json`, `--static-only`, `--dynamic-only`, `--skip-apt`, `--interactive`, `--guided` y `--gui`. La versión también aparece en el banner como `Version 2.1.0`.
+El CLI soporta `--dry-run`, `--plan-json`, `--static-only`, `--dynamic-only`, `--skip-apt`, `--interactive`, `--guided` y `--gui`. La versión también aparece en el banner como `Version 2.2.0`.
 
 ### Trazas ADB
 
@@ -116,13 +128,21 @@ La pestaña **AUDITORÍA ADB** de la GUI (o `./src/no4nn.sh --audit`) audita un 
 
 La pestaña **ANALIZAR TRAZAS** de la GUI (o `./src/no4nn.sh --analyze`) clasifica trazas ya capturadas o archivos subidos (`.txt` o `bugreport.zip`) por fuente, severidad y clase: reinicio/energía, crash, ANR, memoria, permisos, red, almacenamiento, kernel y proceso. También puede pedir un bugreport al dispositivo (`--analyze-pedir-bugreport`, exige `--analyze-confirm` y un dispositivo autorizado) y analizarlo solo. Cada análisis deja `ANALISIS.txt`, `resumen.json` y `MANIFIESTO.txt` en `~/security-tools/analyses/ANALISIS-<fecha>_<etiqueta>/`. El análisis es de solo lectura sobre la entrada y solo muestra conteos y muestras de una línea; el crudo nunca se copia al reporte. Consulta [docs/analizar-trazas.md](docs/analizar-trazas.md).
 
+### ENCRYPT
+
+La pestaña **ENCRYPT** de la GUI (o `./src/no4nn.sh --encrypt`) verifica el cifrado del sistema del dispositivo (`ro.crypto.state`, `ro.crypto.type`) con veredicto **CIFRADO / SIN CIFRAR / DESCONOCIDO**, cifra y descifra archivos locales con OpenSSL AES-256-CBC + PBKDF2 (`.aes256`, contraseña en archivo 0600), e instala la app compañera DeviceCrypt (`com.zapia.devicecrypt`, AES/GCM + Android Keystore, formato `.crypt`) con `adb install -r`. **Esta herramienta NO activa el cifrado del sistema**: desde Android 10 es FBE y viene activo de fábrica. Los formatos `.aes256` y `.crypt` no son intercambiables. Consulta [docs/encrypt-android.md](docs/encrypt-android.md).
+
+### Apps, uso y conexiones
+
+La pestaña **APPS** de la GUI (o `./src/no4nn.sh --apps`) lista las apps del dispositivo con su uso en primer plano, sus conexiones activas y su desglose de datos (móvil y Wi-Fi), más las acciones que piden apps y daemons (servicios, trabajos, alarmas y wakelocks) y el árbol de procesos con el PID heredado (de quién hereda cada proceso, con herencia inusual marcada). Por defecto solo apps de terceros; `--apps-todas` añade las del sistema. Cada recogida deja `APPS.txt`, `resumen.json` y `MANIFIESTO.txt` en `~/security-tools/apps/APPS-<fecha>_<serial>/`. Solo metadatos: no recoge contenido, ni mensajes, ni cargas útiles de red. Consulta [docs/apps-uso-conexiones.md](docs/apps-uso-conexiones.md).
+
 ## Integración con Ubuntu
 
-El repositorio incluye un icono SVG, un archivo `.desktop` y un paquete Debian versionado. Puedes consultar directamente el [paquete `.deb` v2.1.0](android-analysis-toolchain_2.1.0_all.deb), el [lanzador `.desktop`](packaging/debian/usr/share/applications/android-analysis.desktop), el [icono SVG](packaging/debian/usr/share/icons/hicolor/scalable/apps/android-analysis.svg) y el [script de construcción](packaging/build-deb.sh).
+El repositorio incluye un icono SVG, un archivo `.desktop` y un paquete Debian versionado. Puedes consultar directamente el [paquete `.deb` v2.2.0](android-analysis-toolchain_2.2.0_all.deb), el [lanzador `.desktop`](packaging/debian/usr/share/applications/android-analysis.desktop), el [icono SVG](packaging/debian/usr/share/icons/hicolor/scalable/apps/android-analysis.svg) y el [script de construcción](packaging/build-deb.sh).
 
 ```bash
 ./packaging/build-deb.sh
-sudo apt install ./android-analysis-toolchain_2.1.0_all.deb
+sudo apt install ./android-analysis-toolchain_2.2.0_all.deb
 ```
 
 Consulta [docs/desktop-integration.md](docs/desktop-integration.md) para la estructura, los campos del lanzador y la actualización manual del menú.
@@ -135,7 +155,7 @@ Kali Linux usa el mismo formato Debian, por lo que el paquete se puede construir
 sudo apt update
 sudo apt install -y python3-tk android-tools-adb dpkg-dev
 ./packaging/build-deb.sh
-sudo apt install ./android-analysis-toolchain_2.1.0_all.deb
+sudo apt install ./android-analysis-toolchain_2.2.0_all.deb
 ```
 
 El icono fuente está disponible en [`assets/android-analysis-kali.svg`](assets/android-analysis-kali.svg) y se instala en el paquete como `android-analysis.svg`. Después de instalar, busca **Android Analysis** en el menú de Kali o ejecuta `android-analysis` desde una terminal.
